@@ -119,7 +119,7 @@ object TermuxBackend {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0
         val callback = PendingIntent.getBroadcast(context, id, callbackIntent, flags)
 
-        try {
+        return try {
             val shellCommand =
                 "exec timeout --signal=TERM --kill-after=2s " + seconds + "s " +
                     PREFIX + "/bin/bash -lc " + shellQuote(command)
