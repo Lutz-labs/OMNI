@@ -22,6 +22,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.runtime.setValue
@@ -44,6 +45,7 @@ import dev.omalauncher.widgets.Market
 import dev.omalauncher.widgets.WidgetEngine
 import dev.omalauncher.widgets.market.CatalogEntry
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** The launcher's settings hub, opened from the gear next to the drawer's search. */
@@ -66,6 +68,9 @@ fun SettingsScreen(
     var localNetworkMissing by remember { mutableStateOf(LocalNetwork.missing(context)) }
     var termuxInstalled by remember { mutableStateOf(TermuxBackend.isInstalled(context)) }
     var termuxPermission by remember { mutableStateOf(TermuxBackend.hasRunCommandPermission(context)) }
+    var termuxTestRunning by remember { mutableStateOf(false) }
+    var termuxTestOutput by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
     // Once Android won't show its dialog any more, a tap opens the app's own settings, where the switch then is.
     val askLocalNetwork = rememberAskPermission(LocalNetwork.PERMISSION) { localNetworkMissing = !it }
     val roles = remember { context.getSystemService(RoleManager::class.java) }
@@ -122,6 +127,39 @@ fun SettingsScreen(
                         !termuxPermission -> askTermuxPermission.launch(TermuxBackend.RUN_COMMAND_PERMISSION)
                         else -> context.packageManager.getLaunchIntentForPackage(TermuxBackend.PACKAGE)?.let(context::startActivity)
                     }
+                },
+                if (termuxInstalled && termuxPermission) {
+                    SettingsRow(
+                        R.string.settings_termux_test,
+                        when {
+                            termuxTestRunning -> stringResource(R.string.settings_termux_test_running)
+                            termuxTestOutput != null -> termuxTestOutput!!
+                            else -> stringResource(R.string.settings_termux_test_subtitle)
+                        },
+                    ) {
+                        if (!termuxTestRunning) {
+                            termuxTestRunning = true
+                            termuxTestOutput = null
+                            scope.launch {
+                                try {
+                                    val result = withContext(Dispatchers.IO) {
+                                        TermuxBackend.run(context, "id", timeoutSeconds = 10)
+                                    }
+                                    termuxTestOutput = buildString {
+                                        append(result.stdout.trim().ifBlank { "(empty stdout)" })
+                                        if (result.stderr.isNotBlank()) append("\\nstderr: ").append(result.stderr.trim())
+                                        append("\\nexit code: ").append(result.exitCode)
+                                    }.take(4000)
+                                } catch (error: Exception) {
+                                    termuxTestOutput = "failed: ${error.message ?: error.javaClass.simpleName}"
+                                } finally {
+                                    termuxTestRunning = false
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    null
                 },
                 if (installed) {
                     SettingsRow(

@@ -21,6 +21,9 @@
     <string name="settings_termux_missing">not installed · install Termux first</string>
     <string name="settings_termux_permission_missing">tap to grant RUN_COMMAND permission</string>
     <string name="settings_termux_configure">permission granted · set allow-external-apps=true and restart Termux</string>
+    <string name="settings_termux_test">test Termux bridge</string>
+    <string name="settings_termux_test_subtitle">run id through Termux and show its result here</string>
+    <string name="settings_termux_test_running">running id through Termux…</string>
     <string name="settings_linux_installed">installed · remove</string>
     <!-- %2$s is the setup stage, like "download arch linux". -->
     <string name="settings_linux_installing_percent">installing %1$d%% · %2$s</string>
