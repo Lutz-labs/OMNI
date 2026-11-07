@@ -37,6 +37,7 @@ import dev.omalauncher.AppLanguage
 import dev.omalauncher.LocalNetwork
 import dev.omalauncher.R
 import dev.omalauncher.Runtime
+import dev.omalauncher.termux.TermuxBackend
 import dev.omalauncher.linux.JobState
 import dev.omalauncher.linux.LinuxState
 import dev.omalauncher.widgets.Market
@@ -63,6 +64,8 @@ fun SettingsScreen(
     val linux by runtime.bootstrap.state.collectAsState()
     val installed = linux == LinuxState.Installed
     var localNetworkMissing by remember { mutableStateOf(LocalNetwork.missing(context)) }
+    var termuxInstalled by remember { mutableStateOf(TermuxBackend.isInstalled(context)) }
+    var termuxPermission by remember { mutableStateOf(TermuxBackend.hasRunCommandPermission(context)) }
     // Once Android won't show its dialog any more, a tap opens the app's own settings, where the switch then is.
     val askLocalNetwork = rememberAskPermission(LocalNetwork.PERMISSION) { localNetworkMissing = !it }
     val roles = remember { context.getSystemService(RoleManager::class.java) }
@@ -72,7 +75,12 @@ fun SettingsScreen(
     LifecycleResumeEffect(Unit) {
         notHome = homeRoleMissing()
         localNetworkMissing = LocalNetwork.missing(context)
+        termuxInstalled = TermuxBackend.isInstalled(context)
+        termuxPermission = TermuxBackend.hasRunCommandPermission(context)
         onPauseOrDispose {}
+    }
+    val askTermuxPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        termuxPermission = TermuxBackend.hasRunCommandPermission(context)
     }
     val askHome =
         rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
@@ -92,6 +100,11 @@ fun SettingsScreen(
                 else -> stringResource(R.string.settings_linux_not_installed)
             }
         val needsLinux = stringResource(R.string.settings_needs_linux)
+        val termuxStatus = when {
+            !termuxInstalled -> stringResource(R.string.settings_termux_missing)
+            !termuxPermission -> stringResource(R.string.settings_termux_permission_missing)
+            else -> stringResource(R.string.settings_termux_configure)
+        }
         val rows =
             listOfNotNull(
                 SettingsRow(R.string.settings_style, runtime.themes.current?.title ?: stringResource(R.string.settings_style_subtitle), onStyle),
@@ -103,6 +116,13 @@ fun SettingsScreen(
                 ),
                 languageRow(),
                 SettingsRow(R.string.settings_linux, linuxStatus, onLinux),
+                SettingsRow(R.string.settings_termux, termuxStatus) {
+                    when {
+                        !termuxInstalled -> Unit
+                        !termuxPermission -> askTermuxPermission.launch(TermuxBackend.RUN_COMMAND_PERMISSION)
+                        else -> context.packageManager.getLaunchIntentForPackage(TermuxBackend.PACKAGE)?.let(context::startActivity)
+                    }
+                },
                 if (installed) {
                     SettingsRow(
                         R.string.settings_agents,

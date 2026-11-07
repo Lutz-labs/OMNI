@@ -17,6 +17,10 @@
     <!-- Following the language the phone is set to, rather than one picked here. -->
     <string name="settings_language_phone">phone\'s language</string>
     <string name="settings_linux">linux</string>
+    <string name="settings_termux">termux</string>
+    <string name="settings_termux_missing">not installed · install Termux first</string>
+    <string name="settings_termux_permission_missing">tap to grant RUN_COMMAND permission</string>
+    <string name="settings_termux_configure">permission granted · set allow-external-apps=true and restart Termux</string>
     <string name="settings_linux_installed">installed · remove</string>
     <!-- %2$s is the setup stage, like "download arch linux". -->
     <string name="settings_linux_installing_percent">installing %1$d%% · %2$s</string>
