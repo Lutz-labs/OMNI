@@ -134,8 +134,8 @@ object TermuxBackend {
             context.startService(request)
 
             val responseIntent = withTimeout(seconds * 1000L + RESULT_GRACE_MS) { response.await() }
-            val result = responseIntent.getBundleExtra(RESULT_BUNDLE)
-                ?: throw IOException("Termux returned no result bundle")
+            // The receiver already unwraps the nested result bundle before completing this deferred.
+            val result = responseIntent
             val errorCode = result.getInt(ERROR, Activity.RESULT_OK)
             if (errorCode != Activity.RESULT_OK) {
                 throw IOException(
