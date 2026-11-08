@@ -59,7 +59,9 @@ class EntryScriptTest {
     @Test
     fun `hosts are synced from the configured source`() {
         val cfg = config().copy(hostsSource = "/custom/hosts")
-        assertTrue(EntryScript.build(cfg).contains("'${'$'}CAT' /custom/hosts"))
+        val script = EntryScript.build(cfg)
+        // The template renders the host tool in double quotes and the source path single-quoted.
+        assertTrue(script.contains("\"${'$'}CAT\" '/custom/hosts'"))
     }
 
     @Test
