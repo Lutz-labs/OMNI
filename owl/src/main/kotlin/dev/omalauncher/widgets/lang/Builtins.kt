@@ -231,7 +231,9 @@ object Builtins {
         val wait = minOf(own, budget?.regexLeft() ?: own)
         if (wait <= 0) throw WidgetError(many)
         val r = regex(p)
-        val started = System.nanoTime()
+        // The shared-allowance accounting uses the budget's clock, so a test can drive it deterministically;
+        // the per-match own timeout below stays a real-time cap whatever clock that is.
+        val started = budget?.nanoTime() ?: System.nanoTime()
         val task = regexThreads.submit(Callable { block(r) })
         try {
             return task.get(wait, TimeUnit.NANOSECONDS)
@@ -243,7 +245,7 @@ object Builtins {
         } catch (e: ExecutionException) {
             throw e.cause ?: e
         } finally {
-            budget?.regexSpent(System.nanoTime() - started)
+            budget?.regexSpent((budget.nanoTime()) - started)
         }
     }
 

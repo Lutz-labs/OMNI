@@ -14,6 +14,7 @@ class LangTest {
     /** Just enough runtime for tests: states start at their initial value, lets evaluate on read. */
     private class TestHost(
         val program: Program?,
+        budget: Budget = Budget(10_000),
     ) : Host {
         constructor(n: Int) : this(null) {
             slots = Array(n) { Null }
@@ -23,7 +24,7 @@ class LangTest {
         val actions = ArrayList<String>()
 
         // Before init: a state's first value can call builtins, which tick it.
-        override val budget = Budget(10_000)
+        override val budget = budget
 
         init {
             program?.globals?.forEachIndexed { i, g -> if (g is Global.State) slots[i] = g.init(Env.root(this)) }
@@ -825,19 +826,17 @@ class LangTest {
     @Test fun regexesShareOneUpdatesTime() {
         val p =
             Compiler.compile(
-                "widget \"t\" {\nstate n = 10\nstate k = 1\n" +
+                "widget \"t\" {\nstate n = 8\nstate k = 1\n" +
                     "Text { text: map(range(k), i => match(pad(\"\", n, \"a\"), \"(.*a){4}b\")) }\n}",
             )
-        val host = TestHost(p)
+        // A synthetic counter: every read advances a fixed step, so each match costs exactly STEP of the shared
+        // allowance — deterministic on any machine, no wall-clock calibration. 1e9 of allowance at 3e8 per match
+        // exhausts after 4 matches; the 5th must give up. Far below Long.MAX, so no overflow.
+        var fakeNanos = 0L
+        val step = 300_000_000L
+        val host = TestHost(p, Budget(limit = 10_000, regexNanos = 1_000_000_000L, nanoTime = { fakeNanos += step; fakeNanos }))
         val ev = (p.root.single() as WNode.Element).props["text"]!!
 
-        fun timed(): Long {
-            val started = System.nanoTime()
-            host.budget.eval(ev, Env.root(host))
-            return (System.nanoTime() - started) / 1_000_000
-        }
-        // A text long enough that one match takes a while, on this machine, but gives up on its own.
-        while (timed() < 60) host.slots[0] = Num((host.slots[0] as Num).v + 4)
         host.slots[1] = Num(40.0)
         val started = System.nanoTime()
         try {
@@ -846,7 +845,7 @@ class LangTest {
         } catch (e: WidgetError) {
             assertTrue(e.message, e.message!!.contains("in all in one update"))
         }
-        // Over 40 times 60 ms before.
+        // Four real matches ran; the eval gave up well before the map finished.
         assertTrue((System.nanoTime() - started) / 1_000_000 < 1800)
         // The pattern isn't refused, and the next update has its own allowance.
         host.slots[1] = Num(1.0)

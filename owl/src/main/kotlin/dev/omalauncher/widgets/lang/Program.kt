@@ -81,6 +81,12 @@ class Budget(
      * own, but a map of matches that each took a little under that held the main thread past Android's five seconds.
      */
     private val regexNanos: Long = 1_000_000_000L,
+    /**
+     * The clock match() measures its shared-allowance spend against. Defaults to the real clock; tests inject a
+     * synthetic counter so the shared allowance can be spent deterministically. The per-match own timeout (500 ms)
+     * is a constant and stays real-time whatever this says.
+     */
+    val nanoTime: () -> Long = System::nanoTime,
 ) {
     private var steps = 0
     private var depth = 0
