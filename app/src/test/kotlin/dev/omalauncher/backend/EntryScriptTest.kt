@@ -45,9 +45,10 @@ class EntryScriptTest {
         val script = EntryScript.build(config())
         val mountOnly = script.substringAfter("mode=")
         assertTrue(mountOnly.contains("--mount-only"))
-        assertTrue(mountOnly.substringBefore("\n").contains("exit 0"))
+        // "then exit 0" lives on the if line, after the mode default on its own line.
+        assertTrue(mountOnly.contains("then exit 0"))
         // The chroot exec must come after the mount-only branch.
-        assertTrue(script.indexOf("--mount-only") < script.indexOf("exec \"\${'$'}C\""))
+        assertTrue(script.indexOf("--mount-only") < script.indexOf("exec \"${'$'}C\""))
     }
 
     @Test
