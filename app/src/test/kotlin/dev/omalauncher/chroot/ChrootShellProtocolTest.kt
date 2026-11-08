@@ -13,9 +13,10 @@ class ChrootShellProtocolTest {
         val cmd = buildMarkerCommand("__omarchy_done_7__", "echo hi", 10)
         assertTrue(cmd.startsWith("timeout 10 bash -c 'echo hi' </dev/null 2>\"\$__err\""))
         assertTrue(cmd.contains("head -c "))
-        assertTrue(cmd.contains("printf '\\n__omarchy_done_7__ %d\\n'"))
+        // The marker is a printf ARGUMENT, after the format string: '\n%s %d\n' __omarchy_done_7__ ...
+        assertTrue(cmd.contains("printf '\\n%s %d\\n' __omarchy_done_7__"))
         assertTrue(cmd.contains("${'$'}{PIPESTATUS[0]}"))
-        assertTrue(cmd.endsWith("printf '\\n__omarchy_done_7__\\n'\n"))
+        assertTrue(cmd.endsWith("printf '\\n%s\\n' __omarchy_done_7__\n"))
     }
 
     @Test
