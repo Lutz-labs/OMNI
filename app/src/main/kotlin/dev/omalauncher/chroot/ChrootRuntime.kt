@@ -158,6 +158,7 @@ class ChrootRuntime(
         } finally {
             runCatching { process.destroy() }
         }
+        Unit
     }
 
     override fun spawn(script: String): Process {
@@ -221,7 +222,7 @@ class ChrootRuntime(
         }
         outThread.join(2_000)
         errThread.join(2_000)
-        val code = if (finished) p.exitValue() else runCatching { p.exitValue() }.getOrElse(-1)
+        val code = if (finished) p.exitValue() else runCatching { p.exitValue() }.getOrElse { -1 }
         return Triple(code, out.toString().trimEnd(), err.toString().trimEnd())
     }
 
