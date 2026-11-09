@@ -13,6 +13,7 @@ import dev.omalauncher.linux.loadLinuxApps
 import dev.omalauncher.linux.resolveLinuxIcon
 import dev.omalauncher.ui.bitmapMask
 import dev.omalauncher.ui.decodeIcon
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
