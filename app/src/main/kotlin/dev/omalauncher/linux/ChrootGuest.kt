@@ -30,7 +30,7 @@ class ChrootGuest(
     override val guestRuntimeDir: String get() = backend.runtimeConfig.runtimeDirGuest
     override val guestHome: String get() = backend.runtimeConfig.guestHome
     override val keymap: File get() = File(launcherFiles, "keymap.xkb")
-    override val guestFs: GuestFs by lazy { chrootGuestFs(backend, rootfs) }
+    override val guestFs: GuestFs by lazy { chrootGuestFs(rootfs) }
 
     override fun guestFile(guestPath: String): File? = guestFileFor(backend.runtimeConfig, guestPath)
 

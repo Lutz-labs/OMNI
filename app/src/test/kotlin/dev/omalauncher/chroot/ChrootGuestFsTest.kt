@@ -1,7 +1,5 @@
 package dev.omalauncher.chroot
 
-import dev.omalauncher.backend.ChrootConfig
-import dev.omalauncher.backend.HostTools
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -11,27 +9,13 @@ import java.nio.file.Files
 
 class ChrootGuestFsTest {
 
-    private fun backend(
-        rootfs: File,
-        stateDir: File,
-    ): ChrootBackend =
-        ChrootBackend(
-            ChrootConfig(
-                rootfs = rootfs.path,
-                hostTools = HostTools.forPrefix("/x"),
-                suCandidates = listOf("/system/bin/su"),
-                stateDir = stateDir.path,
-            ),
-            stateDir,
-        )
-
     @Test
     fun `guest paths map straight into the rootfs`() {
         val rootfs = Files.createTempDirectory("cfs-root").toFile()
         val state = Files.createTempDirectory("cfs-state").toFile()
         val sub = File(rootfs, "sub").apply { mkdirs() }
         File(sub, "file.txt").apply { writeText("x") }
-        val fs = chrootGuestFs(backend(rootfs, state), rootfs)
+        val fs = chrootGuestFs(rootfs)
 
         assertEquals(File(rootfs, "sub/file.txt").canonicalFile, fs.host("/sub/file.txt").canonicalFile)
         assertEquals(File(rootfs, "sub"), fs.host("/sub").canonicalFile)
@@ -44,7 +28,7 @@ class ChrootGuestFsTest {
     fun `mkdir createFile rename and delete work through the bridge`() {
         val rootfs = Files.createTempDirectory("cfs-root").toFile()
         val state = Files.createTempDirectory("cfs-state").toFile()
-        val fs = chrootGuestFs(backend(rootfs, state), rootfs)
+        val fs = chrootGuestFs(rootfs)
 
         val dir = fs.mkdir("/", "newdir")
         assertEquals("/newdir", dir)
@@ -69,7 +53,7 @@ class ChrootGuestFsTest {
         val outside = Files.createTempDirectory("cfs-outside").toFile()
         File(outside, "secret.txt").apply { writeText("s") }
         Files.createSymbolicLink(File(rootfs, "escape").toPath(), outside.toPath())
-        val fs = chrootGuestFs(backend(rootfs, state), rootfs)
+        val fs = chrootGuestFs(rootfs)
         val rootReal = rootfs.canonicalFile
         val outsideReal = outside.canonicalFile
 
@@ -91,7 +75,7 @@ class ChrootGuestFsTest {
     fun `path normalization stays inside the rootfs`() {
         val rootfs = Files.createTempDirectory("cfs-root").toFile()
         val state = Files.createTempDirectory("cfs-state").toFile()
-        val fs = chrootGuestFs(backend(rootfs, state), rootfs)
+        val fs = chrootGuestFs(rootfs)
         // "/../x" collapses to "/x", never outside.
         assertEquals(File(rootfs, "x").canonicalFile, fs.host("/../x").canonicalFile)
     }
