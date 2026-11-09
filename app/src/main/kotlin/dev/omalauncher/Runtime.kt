@@ -38,6 +38,10 @@ import dev.omalauncher.linux.defaultApps
 import dev.omalauncher.linux.matches
 import dev.omalauncher.linux.run
 import dev.omalauncher.linux.shellQuote
+import dev.omalauncher.chroot.BackendLifecycle
+import dev.omalauncher.chroot.BackendSelector
+import dev.omalauncher.chroot.ChrootBackend
+import dev.omalauncher.backend.BackendState
 import dev.omalauncher.theme.Style
 import dev.omalauncher.theme.StyleStore
 import dev.omalauncher.theme.ThemeStore
@@ -88,6 +92,26 @@ class Runtime(
     private val context: Context,
 ) {
     val proot = Proot(context)
+
+    /**
+     * The native Kali chroot backend, active when a rootfs and a root
+     * escalator are present, null otherwise (the legacy PRoot path stays).
+     * Consumers migrate to it one by one; unmigrated consumers keep using
+     * [proot] unchanged.
+     */
+    val chrootBackend: ChrootBackend? by lazy {
+        val config = BackendSelector.runtimeConfig(context.filesDir)
+        if (BackendSelector.canUseChroot(config)) ChrootBackend(config, context.filesDir) else null
+    }
+
+    /** Idempotent prepare/close for the chroot backend, keyed to [start]. */
+    private val chrootLifecycle: BackendLifecycle? by lazy {
+        chrootBackend?.let { BackendLifecycle({ it.prepare() }, { it.close() }) }
+    }
+
+    /** Where the chroot backend stands, for settings and future UI; null when it isn't usable. */
+    val chrootState: kotlinx.coroutines.flow.StateFlow<BackendState>? get() = chrootBackend?.state
+
     val wm = WindowManager()
     val server = WaylandServer(proot.waylandSocket.path, wm).also { wm.server = it }
     private val guestImages = GuestImages(context, File(proot.tmpDir, "clipboard"), proot::guestPath)
@@ -247,6 +271,10 @@ class Runtime(
             // On the first-run screen the download is the screen's job, with progress.
             if (launcherReady) scope.launch { themes.ensureRelease() }
             if (bootstrap.wanted) runLinux { bootstrap.run() } else bootstrap.run()
+            // The chroot backend prepares independently: mounts are global and
+            // presence-guarded, so this never disturbs the legacy flow. No
+            // consumer uses it yet; failure only marks its state.
+            chrootLifecycle?.prepare()
         }
     }
 
