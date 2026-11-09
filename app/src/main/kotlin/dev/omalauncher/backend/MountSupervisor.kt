@@ -1,5 +1,7 @@
 package dev.omalauncher.backend
 
+import java.io.File
+
 /**
  * OMNI's single owner of the chroot mount lifecycle, mirroring the mechanics
  * of the user's own `kali-chroot` script (bind /dev, /dev/pts, proc, /sys —
@@ -32,22 +34,31 @@ class MountSupervisor(
      */
     suspend fun ensureMounted(): Pair<BackendState, Report> {
         val before = MountPlan.parseMounts(readMounts())
-        val missing = MountPlan.missingMounts(config.rootfs, before)
+        val missing = MountPlan.missingMounts(config.rootfs, before, config.runtimeDirGuest)
         val log = ArrayList<String>()
         if (missing.isNotEmpty()) {
             for (guestPath in missing) {
-                val cmd = mountCommand(config, guestPath)
+                val cmd =
+                    if (guestPath == config.rootfs + config.runtimeDirGuest) {
+                        // The launcher's runtime dir (Wayland socket, bridge
+                        // FIFOs) bound into the guest's XDG_RUNTIME_DIR, so
+                        // guest processes reach the same socket as before.
+                        runtimeDirBindCommand(config)
+                    } else {
+                        mountCommand(config, guestPath)
+                    }
                 val (code, out, err) = drain(esc, cmd, 60)
                 log += listOfNotNull("$ $cmd", out.takeIf { it.isNotBlank() }, err.takeIf { it.isNotBlank() }, "exit $code")
             }
         }
         val after = MountPlan.parseMounts(readMounts())
-        val stillMissing = MountPlan.missingMounts(config.rootfs, after)
+        val stillMissing = MountPlan.missingMounts(config.rootfs, after, config.runtimeDirGuest)
         if (stillMissing.isNotEmpty()) {
             return BackendState.MountFailed(log + "still missing: $stillMissing") to Report(emptyList(), emptyList(), log)
         }
-        val present = MountPlan.neededMounts(config.rootfs).filter { it in after }
-        val mountedByUs = MountPlan.neededMounts(config.rootfs).filter { it in after && it !in before }
+        val needed = MountPlan.neededMounts(config.rootfs, config.runtimeDirGuest)
+        val present = needed.filter { it in after }
+        val mountedByUs = needed.filter { it in after && it !in before }
         // Best-effort hosts sync, as the reference entry does; a failure is logged, not fatal.
         if (present.isNotEmpty()) {
             val hosts = "${shellQuote(config.hostTools.cat)} ${shellQuote(config.hostsSource)} > ${shellQuote("${config.rootfs}/etc/hosts")}"
@@ -75,4 +86,15 @@ internal fun mountCommand(
     } else {
         "$mount --bind ${shellQuote(guestPath)} $dst"
     }
+}
+
+/**
+ * The escalated command that binds the launcher's runtime dir (stateDir/xdg:
+ * the Wayland socket and the bridge FIFOs) into the guest's XDG_RUNTIME_DIR,
+ * creating the empty destination first (it does not exist in a fresh rootfs).
+ */
+internal fun runtimeDirBindCommand(config: ChrootConfig): String {
+    val source = shellQuote(File(config.stateDir, "xdg").path)
+    val dst = shellQuote(config.rootfs + config.runtimeDirGuest)
+    return "mkdir -p $dst && ${shellQuote(config.hostTools.mount)} --bind $source $dst"
 }

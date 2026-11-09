@@ -12,10 +12,13 @@ object MountPlan {
 
     /**
      * The guest directories that must be mounted inside [rootfs] before
-     * anything runs there, mirroring the user's own chroot entry script.
+     * anything runs there: the four the user's own chroot entry script mounts,
+     * plus (when [runtimeDirGuest] is set) the launcher's runtime dir bound
+     * into the guest's XDG_RUNTIME_DIR.
      */
-    fun neededMounts(rootfs: String): List<String> =
-        listOf("/dev", "/dev/pts", "/proc", "/sys").map { rootfs + it }
+    fun neededMounts(rootfs: String, runtimeDirGuest: String? = null): List<String> =
+        listOf("/dev", "/dev/pts", "/proc", "/sys").map { rootfs + it } +
+            (runtimeDirGuest?.let { listOf(rootfs + it) } ?: emptyList())
 
     /** Every destination currently mounted, from a `/proc/mounts` dump. */
     fun parseMounts(text: String): Set<String> {
@@ -31,6 +34,6 @@ object MountPlan {
     }
 
     /** Which of [neededMounts] are not in [mountedDestinations]; empty when everything is there. */
-    fun missingMounts(rootfs: String, mountedDestinations: Set<String>): List<String> =
-        neededMounts(rootfs).filter { it !in mountedDestinations }
+    fun missingMounts(rootfs: String, mountedDestinations: Set<String>, runtimeDirGuest: String? = null): List<String> =
+        neededMounts(rootfs, runtimeDirGuest).filter { it !in mountedDestinations }
 }

@@ -12,8 +12,25 @@ class PkgManagerTest {
         val script = aptInstallScript(listOf("git", "curl"))
         assertTrue(script.contains("apt-get update -qq"))
         assertTrue(script.contains("apt-get install -y --no-install-recommends"))
-        assertTrue(script.contains(" git") && script.contains(" curl"))
+        // shellQuote wraps each package; the list ends with the last one, no trailing space.
+        assertTrue(script.endsWith("'git' 'curl'"))
         assertFalse(script.contains("pacman"))
+    }
+
+    @Test
+    fun `install script follows the active guest - apt on Kali, pacman on Arch`() {
+        assertTrue(installScriptFor(arch = false, listOf("git")).contains("apt-get"))
+        assertFalse(installScriptFor(arch = false, listOf("git")).contains("pacman"))
+        assertTrue(installScriptFor(arch = true, listOf("git")).startsWith("pacman -Sy"))
+        assertFalse(installScriptFor(arch = true, listOf("git")).contains("apt-get"))
+    }
+
+    @Test
+    fun `update script follows the active guest - apt on Kali, pacman on Arch`() {
+        assertTrue(updateScriptFor(arch = false).contains("apt-get upgrade -y"))
+        assertFalse(updateScriptFor(arch = false).contains("pacman"))
+        assertTrue(updateScriptFor(arch = true).startsWith("pacman -Syu"))
+        assertFalse(updateScriptFor(arch = true).contains("apt-get"))
     }
 
     @Test

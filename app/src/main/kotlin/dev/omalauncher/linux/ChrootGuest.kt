@@ -24,9 +24,11 @@ class ChrootGuest(
     override val applications: File get() = File(home, ".local/share/applications")
     override val launcherConfig: File get() = File(home, ".config/omalauncher")
     override val tmpDir: File get() = File(rootfs, "tmp")
-    override val runtimeDir: File get() = File(rootfs, "run/user/0")
-    override val guestRuntimeDir: String get() = Proot.GUEST_RUNTIME_DIR
-    override val guestHome: String get() = Proot.GUEST_HOME
+    // The host side of the guest's XDG_RUNTIME_DIR: the same filesDir/xdg the
+    // legacy guest used; the backend binds it over the guest path at prepare.
+    override val runtimeDir: File get() = File(backend.runtimeConfig.stateDir, "xdg")
+    override val guestRuntimeDir: String get() = backend.runtimeConfig.runtimeDirGuest
+    override val guestHome: String get() = backend.runtimeConfig.guestHome
     override val keymap: File get() = File(launcherFiles, "keymap.xkb")
     override val guestFs: GuestFs by lazy { chrootGuestFs(backend, rootfs) }
 

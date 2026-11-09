@@ -27,6 +27,8 @@ class ProcessFactory(
             add("TERM=xterm-256color")
             add("LANG=C.UTF-8")
             add("PATH=${config.guestPath}")
+            add("XDG_RUNTIME_DIR=${config.runtimeDirGuest}")
+            add("WAYLAND_DISPLAY=wayland-0")
             addAll(config.env.map { (k, v) -> "$k=$v" })
             token?.let { add("OMNI_SESSION=$it") }
         }

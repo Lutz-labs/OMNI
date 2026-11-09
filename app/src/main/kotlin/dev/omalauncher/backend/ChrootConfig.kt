@@ -27,6 +27,13 @@ data class ChrootConfig(
     val shellTimeoutSeconds: Int = 10,
     /** `/etc/hosts` source synced into the rootfs on entry, as the user's own chroot entry does. */
     val hostsSource: String = "/system/etc/hosts",
+
+    /**
+     * The guest XDG_RUNTIME_DIR. The launcher binds its own runtime dir
+     * (stateDir/xdg: the Wayland socket, the bridge FIFOs) here, so guest
+     * processes reach the same socket and FIFOs the legacy proot guest sees.
+     */
+    val runtimeDirGuest: String = "/run/user/0",
     /** The guest home directory, as the guest sees it. */
     val guestHome: String = "/root",
     /** Guest PATH inside the rootfs, a standard Kali layout. */

@@ -38,4 +38,22 @@ class MountSupervisorTest {
             assertTrue(cmd.contains("'${config().rootfs}$guest'"))
         }
     }
+
+    @Test
+    fun `runtime dir bind creates the guest XDG_RUNTIME_DIR and binds the launcher dir`() {
+        val cmd = runtimeDirBindCommand(config())
+        val cfg = config()
+        assertTrue(cmd.startsWith("mkdir -p '${cfg.rootfs}/run/user/0' &&"))
+        assertTrue(cmd.contains("--bind '/s/xdg' '${cfg.rootfs}/run/user/0'"))
+    }
+
+    @Test
+    fun `runtime dir guest is part of the required mounts`() {
+        val cfg = config()
+        assertTrue(MountPlan.neededMounts(cfg.rootfs, cfg.runtimeDirGuest).contains("${cfg.rootfs}/run/user/0"))
+        assertEquals(
+            listOf("${cfg.rootfs}/dev", "${cfg.rootfs}/dev/pts", "${cfg.rootfs}/proc", "${cfg.rootfs}/sys", "${cfg.rootfs}/run/user/0"),
+            MountPlan.missingMounts(cfg.rootfs, emptySet(), cfg.runtimeDirGuest),
+        )
+    }
 }

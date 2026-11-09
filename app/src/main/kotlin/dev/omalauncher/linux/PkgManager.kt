@@ -17,12 +17,19 @@ class PkgManager(
     val arch: Boolean get() = guest !is ChrootGuest
 
     /** The guest install script for [packages]: pacman on Arch, apt on Kali. */
-    fun installScript(packages: List<String>): String =
-        if (arch) pacmanInstall(packages) else aptInstallScript(packages)
+    fun installScript(packages: List<String>): String = installScriptFor(arch, packages)
 
     /** The guest update script (packages and their upgrades), for the active guest. */
-    fun updateScript(): String = if (arch) pacmanUpdateScript() else aptUpdateScript()
+    fun updateScript(): String = updateScriptFor(arch)
 }
+
+/** The guest install script: pacman on the legacy Arch guest, apt/dpkg on Kali. */
+internal fun installScriptFor(arch: Boolean, packages: List<String>): String =
+    if (arch) pacmanInstall(packages) else aptInstallScript(packages)
+
+/** The guest update script for the active guest. */
+internal fun updateScriptFor(arch: Boolean): String =
+    if (arch) pacmanUpdateScript() else aptUpdateScript()
 
 /** AUR has no APT mapping: a clear failure, never a translated guess. */
 internal fun aurNotSupported(name: String): String = "AUR package \"$name\" has no APT equivalent on Kali; install it manually in the guest."
@@ -42,7 +49,7 @@ internal fun aptCheckScript(): String =
     if apt-get -s upgrade 2>&1 | grep -qE '^(E:|Err)'; then
       echo '#pacman-error'
     else
-      apt-get -s upgrade 2>&1 | awk '/^Inst /{print ${'$'}2}'
+      apt-get -s upgrade 2>&1 | awk '/^Inst /{sub(/^Inst /, ""); print}'
       echo '#pacman'
     fi
     """.trimIndent()
