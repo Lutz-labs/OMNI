@@ -9,7 +9,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import dev.omalauncher.linux.LinuxApp
-import dev.omalauncher.linux.Proot
 import dev.omalauncher.linux.loadLinuxApps
 import dev.omalauncher.linux.resolveLinuxIcon
 import dev.omalauncher.ui.bitmapMask
@@ -19,10 +18,18 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
-/** The guest's apps from their .desktop entries, with their icons; the Linux side of [AndroidAppCatalog]. */
+/**
+ * The guest's apps from their .desktop entries, with their icons; the Linux
+ * side of [AndroidAppCatalog]. The source directories follow the ACTIVE
+ * backend: the Kali rootfs when the chroot backend is present, the legacy
+ * Arch guest otherwise — resolved per refresh, so a backend switch takes
+ * effect without rebuilding the catalog.
+ */
 class LinuxAppCatalog(
     private val context: Context,
-    private val proot: Proot,
+    private val applications: () -> File,
+    private val systemApplications: () -> File,
+    private val rootfs: () -> File,
 ) {
     val apps = mutableStateListOf<LinuxApp>()
 
@@ -45,7 +52,7 @@ class LinuxAppCatalog(
     suspend fun refresh() = refreshing.withLock { rescan() }
 
     private suspend fun rescan() {
-        val loaded = withContext(Dispatchers.IO) { loadLinuxApps(proot) }
+        val loaded = withContext(Dispatchers.IO) { loadLinuxApps(applications(), systemApplications()) }
         if (loaded != apps.toList()) {
             apps.clear()
             apps += loaded
@@ -71,7 +78,7 @@ class LinuxAppCatalog(
         for (app in missing) {
             val decoded =
                 withContext(Dispatchers.IO) {
-                    resolveLinuxIcon(proot.rootfs, app.icon!!)?.let { decodeIcon(it, size) }?.let { it.asImageBitmap() to bitmapMask(it).asImageBitmap() }
+                    resolveLinuxIcon(rootfs(), app.icon!!)?.let { decodeIcon(it, size) }?.let { it.asImageBitmap() to bitmapMask(it).asImageBitmap() }
                 } ?: continue
             icons[app.id] = decoded.first
             masks[app.id] = decoded.second

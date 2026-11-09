@@ -27,8 +27,11 @@ private val FIELD_CODE = Regex("%[fFuUdDnNickvm]")
  * A user entry replaces the system one with the same file name (XDG), so a
  * NoDisplay=true file in ~/.local/share/applications hides a package's entry.
  */
-fun loadLinuxApps(proot: Proot): List<LinuxApp> {
-    val dirs = listOf(proot.applications, File(proot.rootfs, "usr/share/applications"))
+fun loadLinuxApps(
+    applications: File,
+    systemApplications: File,
+): List<LinuxApp> {
+    val dirs = listOf(applications, systemApplications)
     return dirs
         .flatMap { it.listFiles { f -> f.extension == "desktop" }.orEmpty().toList() }
         .distinctBy { it.name }
