@@ -21,19 +21,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
+import kotlin.coroutines.coroutineContext
 
 /**
- * The Kali chroot backend: wires [MountSupervisor] (one shared, presence-
- * guarded mount lifecycle, never auto-unmounted), [ProcessFactory] (every
- * consumer gets its own process with its own pipes, cwd and env — the
- * original OMNI execution model preserved), and [ProcessRegistry] (identity-
- * verified tree-kill; never a speculative signal, never a PGID kill).
+ * Kali chroot backend. Mounts are shared and presence-guarded; each consumer
+ * retains its own process, pipes, cwd and environment.
  *
- * SECURITY: this is not a sandbox. `env -i` clears environment only; the
- * guest runs as uid 0 with the escalator's capabilities and SELinux domain,
- * and sees only what the mounts expose (rootfs + /dev + /dev/pts + /proc +
- * /sys). Host access depends on mounts, capabilities and SELinux — never on
- * the chroot itself.
+ * This is not a sandbox: the guest runs as uid 0 with the escalator's
+ * capabilities and SELinux domain. Host access depends on mounted paths,
+ * capabilities and SELinux, never on chroot alone.
  */
 class ChrootBackend(
     private val config: ChrootConfig,
@@ -52,11 +48,6 @@ class ChrootBackend(
     private var registry: ProcessRegistry? = null
     private var pool: ChrootShellPool? = null
 
-    /**
-     * Brings the backend to Ready, or a Failed state naming why. Idempotent:
-     * mounts are presence-guarded, so restarts/retries never double-mount
-     * and never duplicate shells.
-     */
     suspend fun prepare(): BackendState = withContext(Dispatchers.IO) {
         _state.value = BackendState.Checking
         val tools = config.hostTools.missing()
@@ -74,8 +65,8 @@ class ChrootBackend(
         val tokens = List(config.shellCount) { "omarchy-${UUID.randomUUID()}" }
         val factory = ProcessFactory(config, esc)
         val registry = ProcessRegistry(esc, config.hostTools.ps)
-        this.factory = factory
-        this.registry = registry
+        this@ChrootBackend.factory = factory
+        this@ChrootBackend.registry = registry
         pool = ChrootShellPool(tokens.map { ChrootShell(config, factory, registry, it) })
 
         MountLedgerFile.write(
@@ -93,8 +84,6 @@ class ChrootBackend(
     ): CmdResult = withContext(Dispatchers.IO) {
         val f = requireFactory()
         val r = requireRegistry()
-        // One-shots are registered too, so a cancelled caller never leaves a guest process behind:
-        // cancellation of this coroutine stops the polling loop, kills the whole tree, and rethrows.
         val token = "run-${UUID.randomUUID()}"
         val process = f.spawnBash(script, cwd = config.guestHome, token = token).start()
         val entry = r.register(process, token)
@@ -107,10 +96,9 @@ class ChrootBackend(
     }
 
     /**
-     * Drains [process] while staying cancellable: the blocking read runs on
-     * a daemon thread and a polling loop checks the coroutine's
-     * cancellation. On cancellation this throws, and the caller kills the
-     * registered guest tree.
+     * Drains the process on a daemon thread while polling coroutine
+     * cancellation. Cancellation exits this loop; run() then kills the
+     * registered guest process tree and rethrows.
      */
     private suspend fun awaitDrain(
         process: Process,
@@ -129,7 +117,7 @@ class ChrootBackend(
             thread.join(50)
         }
         failure?.let { throw it }
-        return result!!
+        return result ?: error("process drain completed without a result")
     }
 
     override suspend fun cmd(
@@ -181,11 +169,7 @@ class ChrootBackend(
         _state.value = BackendState.Checking
     }
 
-    // ---------- internals
-
     private val processLock = Any()
-
-    private fun requireEscalator() = escalator ?: error("backend not prepared: ${_state.value}")
 
     private fun requireFactory() = factory ?: error("backend not prepared: ${_state.value}")
 

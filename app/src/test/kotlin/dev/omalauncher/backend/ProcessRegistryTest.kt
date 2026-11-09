@@ -8,11 +8,9 @@ import org.junit.Test
 class ProcessRegistryTest {
 
     @Test
-    fun `starttime parsed from the stat tail, after a name with parens`() {
-        // "1234 (bash (nested)) S 1 ..." — field 22 overall; tail starts at field 3, so index 19.
+    fun `starttime parsed from stat tail after a name with parentheses`() {
         val tail = buildString {
             append("1234 (some process) S 1 1234 1234 0 -1 4194560 ")
-            // 7 leading fields (S..4194560) already consumed tail indices 0..6; 12 more reach index 19.
             repeat(12) { append("0 ") }
             append("46319582 ")
             append("0 0")
@@ -27,7 +25,7 @@ class ProcessRegistryTest {
     }
 
     @Test
-    fun `ps children map and post-order kill order`() {
+    fun `ps children map and post order kill list`() {
         val ps =
             """
             PID PPID ARGS
@@ -40,33 +38,30 @@ class ProcessRegistryTest {
         val children = parsePsChildren(ps)
         assertEquals(100, children[200])
         assertEquals(200, children[300])
-        // Children before parents; the root itself is excluded (killed separately after its tree).
-        val order = descendantsPostOrder(200, children)
-        assertEquals(listOf(300, 400), order)
+        assertEquals(listOf(300, 400), descendantsPostOrder(200, children))
+    }
+
+    @Test
+    fun `root pid resolved from the sole top level token process`() {
+        val parents = mapOf(100 to 1, 200 to 100, 300 to 200)
+        assertEquals(100, findTokenRootPid(parents, setOf(100, 200, 300)))
+    }
+
+    @Test
+    fun `ambiguous token roots are not guessed`() {
+        val parents = mapOf(100 to 1, 200 to 1, 300 to 100)
+        assertNull(findTokenRootPid(parents, setOf(100, 200, 300)))
     }
 
     @Test
     fun `pids parsed from ps output`() {
-        val ps = "PID ARGS\n100 a\n200 b\n"
-        assertEquals(listOf(100, 200), parsePids(ps))
+        assertEquals(listOf(100, 200), parsePids("PID ARGS\n100 a\n200 b\n"))
     }
 
     @Test
-    fun `retry only when the command was never delivered`() {
-        // A delivered command that died mid-run must not auto-retry (unknown outcome).
-        val deliveredFailure = ShellFailureProbe(true)
-        assertEquals(false, shouldRetry(deliveredFailure.delivered, retry = true))
-        // An undelivered command (shell died before write) is safe to retry.
-        val undeliveredFailure = ShellFailureProbe(false)
-        assertEquals(true, shouldRetry(undeliveredFailure.delivered, retry = true))
-        assertEquals(false, shouldRetry(undeliveredFailure.delivered, retry = false))
+    fun `retry only when command was never delivered`() {
+        assertEquals(false, shouldRetry(delivered = true, retry = true))
+        assertEquals(true, shouldRetry(delivered = false, retry = true))
+        assertEquals(false, shouldRetry(delivered = false, retry = false))
     }
-
-    private class ShellFailureProbe(val delivered: Boolean)
 }
-
-/** The retry decision: only a command that never reached the guest may run again. */
-internal fun shouldRetry(
-    delivered: Boolean,
-    retry: Boolean,
-): Boolean = retry && !delivered
