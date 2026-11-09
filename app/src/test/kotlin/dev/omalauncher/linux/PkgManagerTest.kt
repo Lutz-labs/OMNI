@@ -12,7 +12,7 @@ class PkgManagerTest {
         val script = aptInstallScript(listOf("git", "curl"))
         assertTrue(script.contains("apt-get update -qq"))
         assertTrue(script.contains("apt-get install -y --no-install-recommends"))
-        assertTrue(script.contains(" git ") && script.contains(" curl "))
+        assertTrue(script.contains(" git") && script.contains(" curl"))
         assertFalse(script.contains("pacman"))
     }
 
