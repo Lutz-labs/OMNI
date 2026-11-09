@@ -41,6 +41,7 @@ import dev.omalauncher.linux.shellQuote
 import dev.omalauncher.chroot.BackendLifecycle
 import dev.omalauncher.chroot.BackendSelector
 import dev.omalauncher.chroot.ChrootBackend
+import dev.omalauncher.chroot.activeBackendReady
 import dev.omalauncher.chroot.chrootGuestFs
 import dev.omalauncher.backend.BackendState
 import dev.omalauncher.linux.GuestFs
@@ -132,7 +133,17 @@ class Runtime(
     val terminalFont = TerminalFont(proot, style)
     val launcherFont = LauncherFont(proot, style, context.resources).also { it.restore() }
     val gestures = Gestures(context, style)
-    val linuxApps = LinuxAppCatalog(context, proot)
+    /** Linux app sources follow the ACTIVE backend: Kali rootfs when the chroot backend is present, else the Arch guest. */
+    private fun guestPath(
+        guest: String,
+        legacy: File,
+    ): File = chrootBackend?.guestFile(guest) ?: legacy
+
+    private val guestLinuxApplications get() = guestPath("/root/.local/share/applications", proot.applications)
+    private val guestLinuxSystemApplications get() = guestPath("/usr/share/applications", File(proot.rootfs, "usr/share/applications"))
+    private val guestLinuxRootfs get() = chrootBackend?.rootfs ?: proot.rootfs
+
+    val linuxApps = LinuxAppCatalog(context, { guestLinuxApplications }, { guestLinuxSystemApplications }, { guestLinuxRootfs })
     val androidApps = AndroidAppCatalog(context)
     val usage = AppUsage(context)
     val themes = ThemeStore(context, proot, style, isLinux = { linux }, onConfigChanged = ::syncGuest)
@@ -205,8 +216,18 @@ class Runtime(
     var launcherReady by mutableStateOf(prefs.getBoolean(SETUP_DONE, false) || bootstrap.wanted)
         private set
 
-    /** Linux is installed and its services run: guest commands (like the update check) can go. */
-    private var linux = false
+    /**
+     * Whether the ACTIVE backend is ready for guest work. With a chroot
+     * backend present this is true ONLY when [chrootState] is Ready; a
+     * failed prepare leaves Linux not-ready even if the legacy Arch rootfs
+     * is still installed. Without a chroot backend it follows the legacy
+     * Arch install.
+     */
+    val linux: Boolean
+        get() = activeBackendReady(chrootBackend != null, chrootState?.value, legacyLinux)
+
+    /** The legacy Arch install state; counts only when no chroot backend exists. */
+    private var legacyLinux = false
 
     /** The Linux install and removal; one at a time. */
     private var linuxJob: Job? = null
@@ -341,7 +362,7 @@ class Runtime(
         if (!bootstrap.isInstalled || linuxJob?.isActive == true) return
         linuxJob =
             scope.launch {
-                linux = false
+                legacyLinux = false
                 launcherFont.forget()
                 widgets.linuxChanged(false)
                 audio.stop()
@@ -396,7 +417,7 @@ class Runtime(
             // Linux installed again: its new home has no foot-font.ini yet.
             terminalFont.write()
         }
-        linux = true
+        legacyLinux = true
         // A font picked from Linux that wasn't remembered at start (or was installed since) loads now.
         scope.launch { launcherFont.apply() }
         // The recent apps strip on home lists Linux apps before the app list is ever opened.
