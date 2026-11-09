@@ -83,7 +83,7 @@ class ProcessRegistry(
             return report
         }
         // 2. Descendants, children first, each verified by its environ token.
-        val (_, psOut, _) = drain(esc, "$psBin -eo pid,ppid,args", 10)
+        val (_, psOut, _) = drainBlocking(esc, "$psBin -eo pid,ppid,args", 10)
         val children = parsePsChildren(psOut)
         for (pid in descendantsPostOrder(entry.pid, children)) {
             if (pid == entry.pid) continue
@@ -97,7 +97,7 @@ class ProcessRegistry(
         terminate(entry.pid, report)
         // 4. Environ sweep: daemonized / reparented stragglers that still carry the token.
         val handled = report.killed.toSet() + report.alreadyExited.toSet() + entry.pid
-        val (_, allOut, _) = drain(esc, "$psBin -eo pid,args", 10)
+        val (_, allOut, _) = drainBlocking(esc, "$psBin -eo pid,args", 10)
         for (pid in parsePids(allOut)) {
             if (pid in handled) continue
             if (envHasToken(pid, entry.token) == true) terminate(pid, report)
