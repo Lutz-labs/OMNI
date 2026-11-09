@@ -1,7 +1,5 @@
 package dev.omalauncher.backend
 
-import kotlinx.coroutines.delay
-
 /**
  * Process identity and tree-kill for guest processes, built on what the
  * on-device probes proved:
@@ -44,11 +42,11 @@ class ProcessRegistry(
     )
 
     data class KillReport(
-        val killed: List<Int> = emptyList(),
-        val alreadyExited: List<Int> = emptyList(),
-        val failed: List<Pair<Int, String>> = emptyList(),
-        val inconclusive: List<Pair<Int, String>> = emptyList(),
-        val skipped: List<Pair<Int, String>> = emptyList(),
+        var killed: List<Int> = emptyList(),
+        var alreadyExited: List<Int> = emptyList(),
+        var failed: List<Pair<Int, String>> = emptyList(),
+        var inconclusive: List<Pair<Int, String>> = emptyList(),
+        var skipped: List<Pair<Int, String>> = emptyList(),
     ) {
         val allStopped: Boolean get() = failed.isEmpty() && inconclusive.isEmpty() && skipped.isEmpty()
     }
@@ -75,8 +73,8 @@ class ProcessRegistry(
     fun starttimeOf(pid: Int): Long? =
         runCatching { parseStarttime(drainBlocking(esc, "cat /proc/$pid/stat", 5).second) }.getOrNull()
 
-    /** Kills [entry]'s whole tree (children first), verifying identity before every signal. */
-    suspend fun kill(entry: Entry): KillReport {
+    /** Kills [entry]'s whole tree (children first), verifying identity before every signal. Non-suspend: callable from sync cleanup. */
+    fun kill(entry: Entry): KillReport {
         val report = KillReport()
         // 1. Root identity: start time must still match, or we refuse to touch the pid.
         val now = starttimeOf(entry.pid)
@@ -109,14 +107,19 @@ class ProcessRegistry(
     }
 
     /** Kills every registered entry's tree; used by backend close. */
-    suspend fun killAll(): List<KillReport> = synchronized(this) { entries.values.toList() }.map { kill(it) }
+    fun killAll(): List<KillReport> {
+        val targets = synchronized(this) { entries.values.toList() }
+        val out = ArrayList<KillReport>(targets.size)
+        for (entry in targets) out.add(kill(entry))
+        return out
+    }
 
-    private suspend fun envHasToken(
+    private fun envHasToken(
         pid: Int,
         token: String,
     ): Boolean? =
         runCatching {
-            val (code, _, _) = drain(esc, "grep -qa ${shellQuote("OMNI_SESSION=$token")} /proc/$pid/environ", 5)
+            val (code, _, _) = drainBlocking(esc, "grep -qa ${shellQuote("OMNI_SESSION=$token")} /proc/$pid/environ", 5)
             code == 0
         }.getOrNull()
 
@@ -126,7 +129,7 @@ class ProcessRegistry(
      * signal refused), inconclusive (state unreadable). Only [KillReport.killed]
      * and [KillReport.alreadyExited] count as stopped.
      */
-    private suspend fun terminate(
+    private fun terminate(
         pid: Int,
         report: KillReport,
     ) {
@@ -135,8 +138,8 @@ class ProcessRegistry(
             report.alreadyExited += pid
             return
         }
-        val (code, _, _) = runCatching { drain(esc, "kill -9 $pid", 5) }.getOrElse { Triple(-1, "", "") }
-        delay(150)
+        val (code, _, _) = runCatching { drainBlocking(esc, "kill -9 $pid", 5) }.getOrElse { Triple(-1, "", "") }
+        Thread.sleep(150)
         val aliveAfter = pidAlive(pid)
         when {
             aliveAfter == false -> report.killed += pid
@@ -147,8 +150,8 @@ class ProcessRegistry(
     }
 
     /** null = state unreadable (SELinux/timeout); true/false = definitive. */
-    private suspend fun pidAlive(pid: Int): Boolean? =
-        runCatching { drain(esc, "kill -0 $pid", 3).first == 0 }.getOrNull()
+    private fun pidAlive(pid: Int): Boolean? =
+        runCatching { drainBlocking(esc, "kill -0 $pid", 3).first == 0 }.getOrNull()
 }
 
 /** `pid -> ppid` from a `ps -eo pid,ppid,args` dump; args ignored, quoted header skipped. */

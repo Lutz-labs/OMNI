@@ -51,7 +51,11 @@ class MountSupervisor(
         // Best-effort hosts sync, as the reference entry does; a failure is logged, not fatal.
         if (present.isNotEmpty()) {
             val hosts = "${shellQuote(config.hostTools.cat)} ${shellQuote(config.hostsSource)} > ${shellQuote("${config.rootfs}/etc/hosts")}"
-            runCatching { drain(esc, hosts, 15) }.onFailure { log += "hosts sync failed: ${it.message}" }
+            try {
+                drain(esc, hosts, 15)
+            } catch (e: Exception) {
+                log += "hosts sync failed: ${e.message}"
+            }
         }
         return BackendState.Ready to Report(present, mountedByUs, log)
     }
