@@ -12,7 +12,6 @@ class ChrootGuestFsTest {
     @Test
     fun `guest paths map straight into the rootfs`() {
         val rootfs = Files.createTempDirectory("cfs-root").toFile()
-        val state = Files.createTempDirectory("cfs-state").toFile()
         val sub = File(rootfs, "sub").apply { mkdirs() }
         File(sub, "file.txt").apply { writeText("x") }
         val fs = chrootGuestFs(rootfs)
@@ -27,7 +26,6 @@ class ChrootGuestFsTest {
     @Test
     fun `mkdir createFile rename and delete work through the bridge`() {
         val rootfs = Files.createTempDirectory("cfs-root").toFile()
-        val state = Files.createTempDirectory("cfs-state").toFile()
         val fs = chrootGuestFs(rootfs)
 
         val dir = fs.mkdir("/", "newdir")
@@ -48,7 +46,6 @@ class ChrootGuestFsTest {
     @Test
     fun `a symlink escaping the rootfs never reaches the host`() {
         val rootfs = Files.createTempDirectory("cfs-root").toFile()
-        val state = Files.createTempDirectory("cfs-state").toFile()
         // Target outside the rootfs, like a link swapped in by a guest.
         val outside = Files.createTempDirectory("cfs-outside").toFile()
         File(outside, "secret.txt").apply { writeText("s") }
@@ -74,7 +71,6 @@ class ChrootGuestFsTest {
     @Test
     fun `path normalization stays inside the rootfs`() {
         val rootfs = Files.createTempDirectory("cfs-root").toFile()
-        val state = Files.createTempDirectory("cfs-state").toFile()
         val fs = chrootGuestFs(rootfs)
         // "/../x" collapses to "/x", never outside.
         assertEquals(File(rootfs, "x").canonicalFile, fs.host("/../x").canonicalFile)
