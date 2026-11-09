@@ -14,6 +14,7 @@ import dev.omalauncher.backend.SuEscalator
 import dev.omalauncher.backend.drain
 import dev.omalauncher.backend.drainProcessBlocking
 import dev.omalauncher.backend.guestFileFor
+import dev.omalauncher.backend.homeVisibilityCommand
 import dev.omalauncher.backend.shellQuote
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
