@@ -115,7 +115,7 @@ fun EditorScreen(
 ) {
     val context = LocalContext.current
     val resources = LocalResources.current
-    val fs = runtime.proot.guestFs
+    val fs = runtime.guestFileBridge
     val loaded by produceState<Result<EditorFile>?>(null, path) {
         value = withContext(Dispatchers.IO) { runCatching { readEditorFile(fs.host(path)) } }
     }
@@ -512,7 +512,7 @@ fun EditorHome(
     onExit: () -> Unit,
 ) {
     val context = LocalContext.current
-    val fs = runtime.proot.guestFs
+    val fs = runtime.guestFileBridge
     val recent by produceState(emptyList<String>()) {
         value = withContext(Dispatchers.IO) { EditorPrefs(context).recent.filter { runCatching { fs.host(it).isFile }.getOrDefault(false) } }
     }

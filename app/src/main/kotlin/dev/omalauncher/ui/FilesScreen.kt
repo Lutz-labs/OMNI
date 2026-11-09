@@ -62,7 +62,7 @@ fun FilesScreen(
 ) {
     val context = LocalContext.current
     val resources = LocalResources.current
-    val fs = runtime.proot.guestFs
+    val fs = runtime.guestFileBridge
     val scope = rememberCoroutineScope()
 
     var path by remember(startPath) { mutableStateOf(fs.normalize(startPath)) }

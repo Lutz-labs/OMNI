@@ -41,7 +41,9 @@ import dev.omalauncher.linux.shellQuote
 import dev.omalauncher.chroot.BackendLifecycle
 import dev.omalauncher.chroot.BackendSelector
 import dev.omalauncher.chroot.ChrootBackend
+import dev.omalauncher.chroot.chrootGuestFs
 import dev.omalauncher.backend.BackendState
+import dev.omalauncher.linux.GuestFs
 import dev.omalauncher.theme.Style
 import dev.omalauncher.theme.StyleStore
 import dev.omalauncher.theme.ThemeStore
@@ -111,6 +113,15 @@ class Runtime(
 
     /** Where the chroot backend stands, for settings and future UI; null when it isn't usable. */
     val chrootState: kotlinx.coroutines.flow.StateFlow<BackendState>? get() = chrootBackend?.state
+
+    /**
+     * The guest filesystem view UI and file consumers browse: the Kali
+     * rootfs when the chroot backend is active, the legacy proot guest fs
+     * otherwise. Same [GuestFs] API either way, so the screens don't change
+     * behaviour beyond which rootfs they map to.
+     */
+    val guestFileBridge: GuestFs
+        get() = chrootBackend?.let { chrootGuestFs(it, it.rootfs) } ?: proot.guestFs
 
     val wm = WindowManager()
     val server = WaylandServer(proot.waylandSocket.path, wm).also { wm.server = it }

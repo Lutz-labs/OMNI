@@ -41,6 +41,9 @@ class ChrootBackend(
 
     override val guestHome: String get() = config.guestHome
 
+    /** The rootfs directory the backend runs on. */
+    val rootfs: File get() = File(config.rootfs)
+
     private val ledgerFile = File(stateDir, "chroot-state.ledger")
 
     private var escalator: dev.omalauncher.backend.Escalator? = null
