@@ -220,14 +220,11 @@ class Runtime(
      * Whether the ACTIVE backend is ready for guest work. With a chroot
      * backend present this is true ONLY when [chrootState] is Ready; a
      * failed prepare leaves Linux not-ready even if the legacy Arch rootfs
-     * is still installed. Without a chroot backend it follows the legacy
-     * Arch install.
+     * is still installed. Without a chroot backend it follows
+     * [bootstrap.isInstalled] — the PRoot fallback.
      */
     val linux: Boolean
-        get() = activeBackendReady(chrootBackend != null, chrootState?.value, legacyLinux)
-
-    /** The legacy Arch install state; counts only when no chroot backend exists. */
-    private var legacyLinux = false
+        get() = activeBackendReady(chrootBackend != null, chrootState?.value, bootstrap.isInstalled)
 
     /** The Linux install and removal; one at a time. */
     private var linuxJob: Job? = null
@@ -362,7 +359,7 @@ class Runtime(
         if (!bootstrap.isInstalled || linuxJob?.isActive == true) return
         linuxJob =
             scope.launch {
-                legacyLinux = false
+
                 launcherFont.forget()
                 widgets.linuxChanged(false)
                 audio.stop()
@@ -417,7 +414,7 @@ class Runtime(
             // Linux installed again: its new home has no foot-font.ini yet.
             terminalFont.write()
         }
-        legacyLinux = true
+
         // A font picked from Linux that wasn't remembered at start (or was installed since) loads now.
         scope.launch { launcherFont.apply() }
         // The recent apps strip on home lists Linux apps before the app list is ever opened.
