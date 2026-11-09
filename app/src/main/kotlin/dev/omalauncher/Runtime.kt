@@ -43,6 +43,8 @@ import dev.omalauncher.chroot.BackendSelector
 import dev.omalauncher.chroot.ChrootBackend
 import dev.omalauncher.chroot.activeBackendReady
 import dev.omalauncher.chroot.chrootGuestFs
+import dev.omalauncher.chroot.launchTarget
+import dev.omalauncher.chroot.LaunchTarget
 import dev.omalauncher.backend.BackendState
 import dev.omalauncher.backend.drainProcessBlocking
 import dev.omalauncher.linux.GuestFs
