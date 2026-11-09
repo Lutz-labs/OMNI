@@ -51,6 +51,14 @@ data class ChrootConfig(
      */
     val env: MutableMap<String, String> = ConcurrentHashMap(extraEnv)
 
+    /**
+     * The app-visible rootfs: the real Kali rootfs bound (by root, at prepare)
+     * into the launcher's own directory. The Android sandbox cannot stat
+     * Termux's private dirs, so every app-side File access to the guest goes
+     * through this bind; the guest-side chroot and mounts keep using [rootfs].
+     */
+    val appRootfs: String get() = "$stateDir/chroot-rootfs"
+
     /** Overrides from any source (prefs, a config file): keys matching field names win. */
     fun withOverrides(map: Map<String, String>): ChrootConfig {
         var out = this

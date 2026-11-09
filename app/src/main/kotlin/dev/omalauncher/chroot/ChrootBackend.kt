@@ -41,8 +41,11 @@ class ChrootBackend(
 
     override val guestHome: String get() = config.guestHome
 
-    /** The rootfs directory the backend runs on. */
-    val rootfs: File get() = File(config.rootfs)
+    /** The rootfs directory the backend runs on, as the APP sees it: the real
+     *  rootfs bind-mounted into the app's own dir (the sandbox cannot stat
+     *  Termux's private paths). The escalated chroot/mount commands keep using
+     *  the real [ChrootConfig.rootfs]. */
+    val rootfs: File get() = File(config.appRootfs)
 
     /** The runtime config, for consumers that map guest paths or build raw processes. */
     internal val runtimeConfig: ChrootConfig get() = config
@@ -64,6 +67,17 @@ class ChrootBackend(
         }
     }
 
+    /** The first host tool the guest needs that is missing, via the escalated probe; null when all are present. */
+    private suspend fun missingToolVia(esc: Escalator): Pair<String, String>? {
+        val paths = config.hostTools.paths()
+        val probe =
+            "for t in ${paths.joinToString(" ") { shellQuote(it) }}; do test -x \"$t\" || { echo \"$t\"; exit 1; }; done; echo ok"
+        val (code, out, _) = drain(esc, probe, 15)
+        if (code == 0) return null
+        val missing = out.lines().firstOrNull { it.isNotBlank() } ?: return null
+        return File(missing).name to missing
+    }
+
     private val ledgerFile = File(stateDir, "chroot-state.ledger")
 
     private var escalator: dev.omalauncher.backend.Escalator? = null
@@ -73,17 +87,25 @@ class ChrootBackend(
 
     suspend fun prepare(): BackendState = withContext(Dispatchers.IO) {
         _state.value = BackendState.Checking
-        val tools = config.hostTools.missing()
-        if (tools != null) return@withContext fail(BackendState.HostToolMissing(tools.first, tools.second))
-        if (!File(config.rootfs).isDirectory) return@withContext fail(BackendState.RootfsMissing(config.rootfs))
+        // The app sandbox cannot stat Termux's private dirs (the Kali rootfs
+        // and the host tools live under /data/data/com.termux), so every
+        // presence check is escalated through su, never an app-side File stat.
         val su = config.suCandidates.firstOrNull { File(it).isFile }
             ?: return@withContext fail(BackendState.PrivilegeUnavailable("no su candidate in ${config.suCandidates}"))
         val esc = SuEscalator(su)
         if (!probeRoot(esc)) return@withContext fail(BackendState.PrivilegeUnavailable("$su did not answer as root"))
+        val (rootfsOk, _, _) = drain(esc, "test -d ${shellQuote(config.rootfs)} && echo ok", 10)
+        if (rootfsOk != 0) return@withContext fail(BackendState.RootfsMissing(config.rootfs))
+        val missingTool = missingToolVia(esc)
+        if (missingTool != null) return@withContext fail(BackendState.HostToolMissing(missingTool.first, missingTool.second))
         escalator = esc
 
         val (mountState, report) = MountSupervisor(config, esc).ensureMounted()
         if (mountState is BackendState.Failed) return@withContext mountState
+        // Best-effort: make the guest home traversable by the launcher's own
+        // uid (it reads .desktop entries, themes and agent state through the
+        // app-visible rootfs bind). Never fatal.
+        runCatching { drain(esc, homeVisibilityCommand(config), 20) }
 
         val tokens = List(config.shellCount) { "omarchy-${UUID.randomUUID()}" }
         val factory = ProcessFactory(config, esc)

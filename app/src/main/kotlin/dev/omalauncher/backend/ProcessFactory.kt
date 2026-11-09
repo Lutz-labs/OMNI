@@ -78,7 +78,8 @@ class ProcessFactory(
 /** Host file corresponding to a guest path, or null when the path escapes the rootfs. */
 fun guestFileFor(config: ChrootConfig, guestPath: String): File? {
     if (!guestPath.startsWith("/")) return null
-    val root = File(config.rootfs).canonicalFile
+    // The app-visible rootfs: the sandbox cannot stat Termux's private dirs.
+    val root = File(config.appRootfs).canonicalFile
     val file = File(root, guestPath.trimStart('/')).canonicalFile
     return file.takeIf { it.path.startsWith(root.path) }
 }

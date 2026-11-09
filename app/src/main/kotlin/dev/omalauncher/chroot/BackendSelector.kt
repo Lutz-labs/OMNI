@@ -10,9 +10,14 @@ import java.io.File
  */
 object BackendSelector {
 
-    /** The chroot backend is usable when the Kali rootfs and a root escalator are present. */
+    /**
+     * The chroot backend is usable when a root escalator exists. The rootfs
+     * and the host tools cannot be statted from the app sandbox (they live in
+     * Termux's private dirs), so their presence is verified by the escalated
+     * prepare, which reports the concrete failure state.
+     */
     fun canUseChroot(config: ChrootConfig): Boolean =
-        File(config.rootfs).isDirectory && config.suCandidates.any { File(it).isFile }
+        config.suCandidates.any { File(it).isFile }
 
     /** Runtime config, rooted at the app's files dir (the Termux prefix remains the default). */
     fun runtimeConfig(filesDir: File): ChrootConfig =

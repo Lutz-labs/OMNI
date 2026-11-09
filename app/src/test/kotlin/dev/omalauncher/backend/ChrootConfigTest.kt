@@ -25,6 +25,16 @@ class ChrootConfigTest {
     }
 
     @Test
+    fun `app rootfs lives inside the state dir for sandbox access`() {
+        val cfg = ChrootConfig.termuxDefaults(stateDir = "/x/state")
+        assertEquals("/x/state/chroot-rootfs", cfg.appRootfs)
+        // The app-visible rootfs mirrors the real one but never replaces it:
+        // the escalated chroot still enters the real path.
+        assertEquals("/data/data/com.termux/files/usr/var/lib/proot-distro/containers/kali-rolling/rootfs", cfg.rootfs)
+        assertTrue(cfg.appRootfs != cfg.rootfs)
+    }
+
+    @Test
     fun `overrides replace rootfs, su and state dir`() {
         val cfg =
             ChrootConfig.termuxDefaults(stateDir = "/x/state").withOverrides(

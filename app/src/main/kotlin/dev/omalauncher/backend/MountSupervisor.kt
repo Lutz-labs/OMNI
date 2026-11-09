@@ -56,6 +56,19 @@ class MountSupervisor(
         if (stillMissing.isNotEmpty()) {
             return BackendState.MountFailed(log + "still missing: $stillMissing") to Report(emptyList(), emptyList(), log)
         }
+        // App-side access bind: the sandbox cannot stat Termux's private dirs,
+        // so the real rootfs is mirrored into the app's own dir for every
+        // app-side File access (guest files, .desktop entries, themes).
+        val appDest = config.appRootfs
+        if (appDest !in after) {
+            val cmd = appRootfsBindCommand(config)
+            val (code, out, err) = drain(esc, cmd, 60)
+            log += listOfNotNull("$ $cmd", out.takeIf { it.isNotBlank() }, err.takeIf { it.isNotBlank() }, "exit $code")
+            val afterBind = MountPlan.parseMounts(readMounts())
+            if (appDest !in afterBind) {
+                return BackendState.MountFailed(log + "still missing: $appDest (app rootfs bind)") to Report(emptyList(), emptyList(), log)
+            }
+        }
         val needed = MountPlan.neededMounts(config.rootfs, config.runtimeDirGuest)
         val present = needed.filter { it in after }
         val mountedByUs = needed.filter { it in after && it !in before }
@@ -97,4 +110,31 @@ internal fun runtimeDirBindCommand(config: ChrootConfig): String {
     val source = shellQuote(File(config.stateDir, "xdg").path)
     val dst = shellQuote(config.rootfs + config.runtimeDirGuest)
     return "mkdir -p $dst && ${shellQuote(config.hostTools.mount)} --bind $source $dst"
+}
+
+/**
+ * The escalated command that mirrors the real rootfs into the app's own dir
+ * (stateDir/chroot-rootfs), so the Android sandbox can read guest files; the
+ * destination is created first.
+ */
+internal fun appRootfsBindCommand(config: ChrootConfig): String {
+    val src = shellQuote(config.rootfs)
+    val dst = shellQuote(config.appRootfs)
+    return "mkdir -p $dst && ${shellQuote(config.hostTools.mount)} --bind $src $dst"
+}
+
+/**
+ * The escalated command that makes the guest home traversable by the launcher's
+ * own uid: the guest root user keeps ownership, and the launcher only reads
+ * (and writes files the root user owns through its own escalated helpers).
+ */
+internal fun homeVisibilityCommand(config: ChrootConfig): String {
+    val dirs =
+        listOf(
+            "/root",
+            "/root/.local", "/root/.local/share", "/root/.local/share/applications", "/root/.local/bin",
+            "/root/.config", "/root/.config/omalauncher", "/root/.config/omarchy", "/root/.config/btop",
+            "/root/.local/state", "/root/.local/state/omarchy", "/root/.cache",
+        ).joinToString(" ") { shellQuote(config.rootfs + it) }
+    return "mkdir -p $dirs && chmod 755 $dirs 2>/dev/null; echo ok"
 }

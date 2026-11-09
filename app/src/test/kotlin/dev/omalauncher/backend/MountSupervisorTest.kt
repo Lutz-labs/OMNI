@@ -56,4 +56,21 @@ class MountSupervisorTest {
             MountPlan.missingMounts(cfg.rootfs, emptySet(), cfg.runtimeDirGuest),
         )
     }
+
+    @Test
+    fun `app rootfs bind mirrors the real rootfs into the app dir`() {
+        val cmd = appRootfsBindCommand(config())
+        val cfg = config()
+        assertTrue(cmd.startsWith("mkdir -p '/s/chroot-rootfs' &&"))
+        assertTrue(cmd.contains("--bind '${cfg.rootfs}' '/s/chroot-rootfs'"))
+    }
+
+    @Test
+    fun `home visibility makes the guest home traversable by the launcher uid`() {
+        val cmd = homeVisibilityCommand(config())
+        val cfg = config()
+        assertTrue(cmd.startsWith("mkdir -p '${cfg.rootfs}/root'"))
+        assertTrue(cmd.contains("chmod 755"))
+        assertTrue(cmd.contains("${cfg.rootfs}/root/.local/share/applications"))
+    }
 }
