@@ -80,7 +80,7 @@ class ProcessRegistry(
     private fun readTokenPids(token: String): Set<Int> {
         val needle = shellQuote("OMNI_SESSION=$token")
         val command =
-            "${shellQuote(psBin)} -eo pid= | while IFS= read -r pid; do " +
+            "${shellQuote(psBin)} -eo pid= | while read -r pid; do " +
                 "case \"\$pid\" in *[!0-9]*|'') continue ;; esac; " +
                 "if grep -qa $needle \"/proc/\$pid/environ\" 2>/dev/null; then " +
                 "printf '%s\\n' \"\$pid\"; fi; done"
