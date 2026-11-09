@@ -74,7 +74,7 @@ class ChrootBackend(
     private suspend fun missingToolVia(esc: Escalator): Pair<String, String>? {
         val paths = config.hostTools.paths()
         val probe =
-            "for t in ${paths.joinToString(" ") { shellQuote(it) }}; do test -x \"$t\" || { echo \"$t\"; exit 1; }; done; echo ok"
+            "for t in ${paths.joinToString(" ") { shellQuote(it) }}; do test -x \"\$t\" || { echo \"\$t\"; exit 1; }; done; echo ok"
         val (code, out, _) = drain(esc, probe, 15)
         if (code == 0) return null
         val missing = out.lines().firstOrNull { it.isNotBlank() } ?: return null
