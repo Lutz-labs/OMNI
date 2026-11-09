@@ -75,6 +75,9 @@ data class CmdResult(
 ) {
     /** 124: killed by `timeout`; 137: SIGKILLed (timeout's kill-after, or cancellation). */
     val timedOut: Boolean get() = exitCode == 124 || exitCode == 137
+
+    /** Output hit the capture cap (head -c closed the pipe, SIGPIPE 141): complete but truncated. NOT a timeout. */
+    val capped: Boolean get() = exitCode == 141
 }
 
 /** Where the backend stands. */

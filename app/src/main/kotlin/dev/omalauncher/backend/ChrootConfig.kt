@@ -17,8 +17,8 @@ data class ChrootConfig(
     val hostTools: HostTools,
     /** Privilege escalation candidates, tried in order. */
     val suCandidates: List<String>,
-    /** Where the generated entry script is written, so recovery can find and kill our own sessions. */
-    val entryScript: String,
+    /** Where OMNI keeps its runtime state (mount ledger, process registry); filesDir in the app. */
+    val stateDir: String,
     /** How many persistent shells the pool keeps. */
     val shellCount: Int = 3,
     /** Default timeout for pooled widget commands, seconds. */
@@ -29,13 +29,18 @@ data class ChrootConfig(
     val guestHome: String = "/root",
     /** Guest PATH inside the rootfs, a standard Kali layout. */
     val guestPath: String = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+    /**
+     * Extra environment pairs passed to every guest process. The backend adds
+     * `OMNI_SESSION=<token>` itself per spawn; consumers may add more here.
+     */
+    val extraEnv: Map<String, String> = emptyMap(),
 ) {
     /** Overrides from any source (prefs, a config file): keys matching field names win. */
     fun withOverrides(map: Map<String, String>): ChrootConfig {
         var out = this
         map["rootfs"]?.let { out = out.copy(rootfs = it) }
         map["su"]?.let { out = out.copy(suCandidates = listOf(it)) }
-        map["entryScript"]?.let { out = out.copy(entryScript = it) }
+        map["stateDir"]?.let { out = out.copy(stateDir = it) }
         map["hostsSource"]?.let { out = out.copy(hostsSource = it) }
         // Per-tool overrides, e.g. "tool.mount=/custom/mount".
         val tools = out.hostTools
@@ -49,6 +54,7 @@ data class ChrootConfig(
                     cat = map["tool.cat"] ?: tools.cat,
                     grep = map["tool.grep"] ?: tools.grep,
                     pkill = map["tool.pkill"] ?: tools.pkill,
+                    ps = map["tool.ps"] ?: tools.ps,
                 ),
         )
         return out
@@ -61,14 +67,14 @@ data class ChrootConfig(
          * configuration, so the Termux dependency can be removed later.
          */
         fun termuxDefaults(
-            entryScript: String,
+            stateDir: String,
             prefix: String = "/data/data/com.termux/files/usr",
         ): ChrootConfig =
             ChrootConfig(
                 rootfs = "$prefix/var/lib/proot-distro/containers/kali-rolling/rootfs",
                 hostTools = HostTools.forPrefix(prefix),
                 suCandidates = listOf("$prefix/bin/su", "/system/bin/su", "$prefix/bin/sudo"),
-                entryScript = entryScript,
+                stateDir = stateDir,
             )
     }
 }

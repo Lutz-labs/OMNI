@@ -16,6 +16,7 @@ class HostToolsTest {
         assertEquals("/data/data/com.termux/files/usr/bin/umount", t.umount)
         assertEquals("/data/data/com.termux/files/usr/bin/chroot", t.chroot)
         assertEquals("/data/data/com.termux/files/usr/bin/grep", t.grep)
+        assertEquals("/data/data/com.termux/files/usr/bin/ps", t.ps)
     }
 
     @Test
@@ -30,6 +31,7 @@ class HostToolsTest {
                 cat = File(dir, "cat").apply { createNewFile() }.path,
                 grep = File(dir, "grep").apply { createNewFile() }.path,
                 pkill = File(dir, "pkill").apply { createNewFile() }.path,
+                ps = File(dir, "ps").apply { createNewFile() }.path,
             )
         val missing = t.missing()
         assertNotNull(missing)
@@ -49,6 +51,7 @@ class HostToolsTest {
                 cat = tool("cat"),
                 grep = tool("grep"),
                 pkill = tool("pkill"),
+                ps = tool("ps"),
             )
         assertNull(t.missing())
     }

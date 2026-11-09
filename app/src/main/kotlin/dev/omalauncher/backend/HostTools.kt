@@ -22,6 +22,7 @@ data class HostTools(
     val cat: String,
     val grep: String,
     val pkill: String,
+    val ps: String,
 ) {
     /** The first missing tool: (name, path), or null when every tool is there. */
     fun missing(): Pair<String, String>? =
@@ -32,6 +33,7 @@ data class HostTools(
             "chroot" to chroot,
             "cat" to cat,
             "grep" to grep,
+            "ps" to ps,
         ).firstOrNull { (_, path) -> !File(path).isFile }
 
     companion object {
@@ -45,6 +47,7 @@ data class HostTools(
                 cat = "$prefix/bin/cat",
                 grep = "$prefix/bin/grep",
                 pkill = "$prefix/bin/pkill",
+                ps = "$prefix/bin/ps",
             )
     }
 }
