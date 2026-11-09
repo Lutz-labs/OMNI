@@ -24,7 +24,7 @@ import java.io.IOException
  * seconds after the last listener goes.
  */
 class Streams(
-    private val proot: Proot,
+    private val guest: LinuxGuest,
     private val scope: CoroutineScope,
 ) {
     /** [flow] carries lines, then null when the command exits. */
@@ -74,7 +74,7 @@ class Streams(
 
     private fun open(command: String): SharedFlow<String?> =
         callbackFlow<String?> {
-            val process = proot.process("exec bash -c " + shellQuote(command)).start()
+            val process = guest.process("exec bash -c " + shellQuote(command)).start()
             launch(Dispatchers.IO) {
                 try {
                     process.inputStream.bufferedReader().useLines { lines -> lines.forEach { trySend(it) } }

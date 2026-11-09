@@ -154,14 +154,14 @@ fun agentInvocation(
 }
 
 class AgentStore(
-    private val proot: Proot,
+    private val guest: LinuxGuest,
     /** A string resource with one argument, in the app's language. */
     private val text: (Int, String) -> String,
     /** Called when the set of installed agents changed, so their desktop entries follow. */
     private val onChanged: () -> Unit,
 ) {
-    private val mise get() = File(proot.home, ".local/bin/mise")
-    private val shims get() = File(proot.home, ".local/share/mise/shims")
+    private val mise get() = File(guest.home, ".local/bin/mise")
+    private val shims get() = File(guest.home, ".local/share/mise/shims")
 
     val states = mutableStateMapOf<String, JobState>()
 
@@ -169,7 +169,7 @@ class AgentStore(
     fun isInstalled(agent: Agent) = Files.exists(File(shims, agent.bin).toPath(), LinkOption.NOFOLLOW_LINKS)
 
     /** The agent picked in the prompt bar, kept in the guest home where scripts can read it too. */
-    private val preferredFile get() = File(proot.launcherConfig, "agent")
+    private val preferredFile get() = File(guest.launcherConfig, "agent")
     private var preferred by mutableStateOf<String?>(null)
 
     /** Reads what's on disk; call off the main thread before the UI needs [default]. */
@@ -241,7 +241,7 @@ class AgentStore(
     /** Drawer entries for the installed agents, with their logos (see [bundledIcons]); each opens in a terminal in the home directory. */
     fun managed(): List<Managed> =
         installed.map { agent ->
-            Managed.text(File(proot.applications, "agent-${agent.bin}.desktop"), Policy.Owned) {
+            Managed.text(File(guest.applications, "agent-${agent.bin}.desktop"), Policy.Owned) {
                 "[Desktop Entry]\nType=Application\nName=${agent.name}\nTerminal=true\nExec=${agent.command}\nIcon=${bundledIcon("agent-${agent.bin}")}\n"
             }
         } + codexConfig()
@@ -260,7 +260,7 @@ class AgentStore(
             emptyList()
         } else {
             listOf(
-                Managed.text(File(proot.rootfs, "etc/codex/config.toml"), Policy.Owned) {
+                Managed.text(File(guest.rootfs, "etc/codex/config.toml"), Policy.Owned) {
                     "# Written by the launcher.\nsandbox_mode = \"danger-full-access\"\n\n[features]\ndaemon_auto_start = false\n"
                 },
             )
@@ -277,7 +277,7 @@ class AgentStore(
         // The script is made once it's this job's turn: the one before may have installed mise.
         val (ok, _) =
             try {
-                lock.withLock { proot.trackedJob(action, withContext(Dispatchers.IO) { script() }, publish = publish) }
+                lock.withLock { guest.trackedJob(action, withContext(Dispatchers.IO) { script() }, publish = publish) }
             } catch (e: CancellationException) {
                 // Its screen closed before its turn: the row isn't left "waiting…", which also blocks installing it again.
                 if (states[agent.bin] === waiting) states.remove(agent.bin)

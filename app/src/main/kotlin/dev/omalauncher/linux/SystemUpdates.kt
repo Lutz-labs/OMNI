@@ -49,11 +49,11 @@ data class PendingUpdates(
  * Arch upgrades are big and now and then need attention.
  */
 class SystemUpdates(
-    private val proot: Proot,
-    private val pacman: Pacman,
+    private val guest: LinuxGuest,
+    private val pkgManager: PkgManager,
     private val agents: AgentStore,
 ) {
-    private val file = File(proot.filesDir, "updates.json")
+    private val file = File(guest.filesDir, "updates.json")
 
     var pending by mutableStateOf<PendingUpdates?>(null)
         private set
@@ -105,7 +105,11 @@ class SystemUpdates(
 
     private fun runCheck(): PendingUpdates {
         val out = StringBuilder()
-        val code = runCatching { proot.run(CHECK_SCRIPT) { out.appendLine(it) } }.getOrElse { -1 }
+        // Kali checks with a simulated apt upgrade (never touching the real
+        // databases, like checkupdates does not on Arch); the output keeps the
+        // same "#pacman" marker shape the parser reads.
+        val script = if (pkgManager.arch) CHECK_SCRIPT else aptCheckScript()
+        val code = runCatching { guest.run(script) { out.appendLine(it) } }.getOrElse { -1 }
         val text = out.toString()
         val now = System.currentTimeMillis()
         if (code != 0 || "#pacman-error" in text) {
@@ -149,7 +153,7 @@ class SystemUpdates(
         if (job is JobState.Working) return false
         // mise's too, as agents install and remove with it: mise's first, as agent jobs never take pacman's.
         job = JobState.Working(R.string.linux_job_waiting, emptyList())
-        val (ok, _) = agents.lock.withLock { proot.trackedJob(R.string.linux_job_updating, UPDATE_SCRIPT, pacman.lock) { job = it } }
+        val (ok, _) = agents.lock.withLock { guest.trackedJob(R.string.linux_job_updating, if (pkgManager.arch) UPDATE_SCRIPT else pkgManager.updateScript(), pkgManager.lock) { job = it } }
         // Agents may have changed, and what's left to update is worth knowing either way.
         withContext(Dispatchers.IO) { agents.load() }
         check(force = true)

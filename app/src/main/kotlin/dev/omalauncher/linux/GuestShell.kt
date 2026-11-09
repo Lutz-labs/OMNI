@@ -23,7 +23,7 @@ data class ShellResult(
  * Commands run one at a time, each under `timeout`.
  */
 class GuestShell(
-    private val proot: Proot,
+    private val guest: LinuxGuest,
 ) {
     private val mutex = Mutex()
     private var process: Process? = null
@@ -92,7 +92,7 @@ class GuestShell(
 
     private fun ensureStarted() {
         if (process?.isAlive == true) return
-        val p = proot.process("exec bash --noprofile --norc").start()
+        val p = guest.process("exec bash --noprofile --norc").start()
         process = p
         stdin = p.outputStream.bufferedWriter()
         stdout = p.inputStream.bufferedReader()
@@ -116,7 +116,7 @@ private const val MAX_OUT = 4 shl 20
  * up every other widget. Shells start on first use.
  */
 class ShellPool(
-    proot: Proot,
+    guest: LinuxGuest,
     size: Int,
 ) {
     private val idle = Channel<GuestShell>(size).apply { repeat(size) { trySend(GuestShell(proot)) } }

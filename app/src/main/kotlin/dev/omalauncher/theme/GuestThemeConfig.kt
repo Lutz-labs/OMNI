@@ -16,10 +16,10 @@ import java.io.File
  * them up. The configs are defaults the user may edit (see [Policy.Seeded]).
  */
 class GuestThemeConfig(
-    private val proot: Proot,
+    private val guest: LinuxGuest,
     private val omarchyDir: File,
 ) {
-    private val home = proot.home
+    private val home = guest.home
     private val templatesDir = File(omarchyDir, "default/themed")
     private val currentDir = File(home, ".local/state/omarchy/current")
 
@@ -56,7 +56,7 @@ class GuestThemeConfig(
 
     /** Mirrors Omarchy's ~/.local/state/omarchy/current/background symlink. */
     fun linkBackground(file: File) {
-        proot.guestPath(file)?.let { symlink(it, File(currentDir, "background")) }
+        guest.guestPath(file)?.let { symlink(it, File(currentDir, "background")) }
     }
 
     private fun symlink(
@@ -93,7 +93,7 @@ class GuestThemeConfig(
         }
         // btop rewrites its config on exit; from then on it's the user's.
         copy("config/btop/btop.conf", ".config/btop/btop.conf")
-        files.add(Managed.text(File(proot.rootfs, "usr/local/bin/btop"), Policy.Owned, executable = true) { BTOP })
+        files.add(Managed.text(File(guest.rootfs, "usr/local/bin/btop"), Policy.Owned, executable = true) { BTOP })
         copy("icon.txt", ".config/omarchy/branding/about.txt")
         copy("config/starship.toml", ".config/starship.toml")
         copy("config/lazygit/config.yml", ".config/lazygit/config.yml")
@@ -134,13 +134,13 @@ class GuestThemeConfig(
                 emit("19", "selection_foreground")
                 for (i in 0..15) c["color$i"]?.let { append("\u001b]4;$i;$it\u0007") }
             }
-        proot.hostFile("/tmp/omarchy-osc").writeText(osc)
+        guest.hostFile("/tmp/omarchy-osc").writeText(osc)
         val script =
             "for p in \$(pgrep -x foot); do for c in \$(pgrep -P \$p); do " +
                 "t=\$(readlink /proc/\$c/fd/1); case \$t in /dev/pts/*) cat /tmp/omarchy-osc > \$t;; esac; done; done; " +
                 // Like omarchy-restart-btop: btop reloads its theme on SIGUSR2.
                 "pkill -SIGUSR2 btop; true"
-        runCatching { proot.run(script) }
+        runCatching { guest.run(script) }
     }
 
     private companion object {

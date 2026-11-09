@@ -1,5 +1,7 @@
 package dev.omalauncher.backend
 
+import java.util.concurrent.ConcurrentHashMap
+
 /**
  * Everything the chroot backend needs to know about its environment.
  *
@@ -35,6 +37,13 @@ data class ChrootConfig(
      */
     val extraEnv: Map<String, String> = emptyMap(),
 ) {
+    /**
+     * Mutable extra environment, initialised from [extraEnv]; consumers push
+     * per-run environment (GPU, agents) here and every subsequent guest
+     * process picks it up. Thread-safe; read by [ProcessFactory.guestEnv].
+     */
+    val env: MutableMap<String, String> = ConcurrentHashMap(extraEnv)
+
     /** Overrides from any source (prefs, a config file): keys matching field names win. */
     fun withOverrides(map: Map<String, String>): ChrootConfig {
         var out = this

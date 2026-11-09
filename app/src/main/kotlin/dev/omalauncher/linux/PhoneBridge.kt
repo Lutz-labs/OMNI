@@ -54,18 +54,18 @@ private const val TAG = "phone"
  */
 class PhoneBridge(
     private val context: Context,
-    private val proot: Proot,
+    private val guest: LinuxGuest,
     private val location: PhoneLocation,
     private val calendar: PhoneCalendar,
     private val airpods: () -> AirPods,
     /** Main: the sources are read on the main thread, as widgets read them. */
     private val scope: CoroutineScope,
 ) {
-    private val inbox = File(proot.runtimeDir, "phone")
+    private val inbox = File(guest.runtimeDir, "phone")
     private var observer: FileObserver? = null
 
     fun managed(): List<Managed> {
-        val bin = File(proot.rootfs, "usr/local/bin")
+        val bin = File(guest.rootfs, "usr/local/bin")
         return listOf(
             Managed.asset(context, SCRIPT, File(bin, COMMAND), Policy.Owned, executable = true),
             // Agents told about `phone` in 0.20, and AGENTS.md files edited since, still call it that.
@@ -172,7 +172,7 @@ class PhoneBridge(
         val mimes = HashSet<String>()
         for (path in paths) {
             // Not there for Android: one Linux makes up (/proc), or behind a link out of Linux.
-            val file = withContext(Dispatchers.IO) { proot.guestFile(path)?.takeIf { it.isFile } }
+            val file = withContext(Dispatchers.IO) { guest.guestFile(path)?.takeIf { it.isFile } }
             val uri = file?.let { runCatching { FileProvider.getUriForFile(context, context.packageName + ".files", it) }.getOrNull() } ?: return Answer.Error("share: $path can't be handed to Android")
             uris += uri
             mimes += mimeOf(file.name) ?: "*/*"

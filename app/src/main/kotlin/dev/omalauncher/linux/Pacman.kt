@@ -27,7 +27,7 @@ data class Package(
 /** Installs and removes guest packages from the settings screen, one pacman at a time. */
 class Pacman(
     private val context: Context,
-    private val proot: Proot,
+    private val guest: LinuxGuest,
 ) {
     /** pacman holds a lock on its database; everything that runs it takes this first. */
     val lock = Mutex()
@@ -45,7 +45,7 @@ class Pacman(
      */
     val core = CORE_PACKAGES + setOf("base", "archlinuxarm-keyring")
 
-    private val localDb = File(proot.rootfs, "var/lib/pacman/local")
+    private val localDb = File(guest.rootfs, "var/lib/pacman/local")
 
     /**
      * The sync repos and the AUR together, best name matches first. AUR packages
@@ -112,7 +112,7 @@ class Pacman(
 
     /**
      * Explicitly installed packages (what `pacman -Qe` lists), read straight from the
-     * local database: much faster than starting proot.
+     * local database: much faster than starting guest.
      */
     suspend fun installed(): List<Package> =
         withContext(Dispatchers.IO) {
@@ -151,11 +151,11 @@ class Pacman(
      * and the yay wrapper that builds as a user even when called as root (by App Finder, say).
      */
     fun managed(): List<Managed> {
-        val dir = File(proot.rootfs, "usr/local/lib/aur")
+        val dir = File(guest.rootfs, "usr/local/lib/aur")
         return listOf(
             "install.sh" to File(dir, "install.sh"),
             "fakeroot" to File(dir, "bin/fakeroot"),
-            "yay" to File(proot.rootfs, "usr/local/bin/yay"),
+            "yay" to File(guest.rootfs, "usr/local/bin/yay"),
         ).map { (asset, target) ->
             Managed.asset(context, "aur/$asset", target, Policy.Owned, executable = true)
         }
@@ -178,7 +178,7 @@ class Pacman(
         @StringRes action: Int,
         script: String,
     ): Boolean {
-        val (ok, _) = proot.trackedJob(action, script, lock) { if (it == JobState.Idle) states.remove(name) else states[name] = it }
+        val (ok, _) = guest.trackedJob(action, script, lock) { if (it == JobState.Idle) states.remove(name) else states[name] = it }
         Log.i(TAG, "${context.getString(action)} $name: ${if (ok) "ok" else "failed"}")
         revision.intValue++
         return ok

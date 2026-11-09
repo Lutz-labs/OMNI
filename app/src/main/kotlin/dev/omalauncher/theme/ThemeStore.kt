@@ -17,7 +17,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import dev.omalauncher.LauncherData
 import dev.omalauncher.R
-import dev.omalauncher.linux.Proot
+import dev.omalauncher.linux.LinuxGuest
 import dev.omalauncher.ui.Palette
 import dev.omalauncher.ui.decodeForScreen
 import dev.omalauncher.upgrade.appStamp
@@ -90,7 +90,7 @@ sealed interface ThemeDownload {
  */
 class ThemeStore(
     private val context: Context,
-    proot: Proot,
+    guest: LinuxGuest,
     /** Where the picked theme and background are saved. */
     private val style: StyleStore,
     /** Whether Linux is installed; without it, nothing is written into the guest. */

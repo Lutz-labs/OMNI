@@ -28,7 +28,7 @@ import kotlin.math.roundToInt
  * ([catchUp]), but keeps its family. Main thread.
  */
 class TerminalFont(
-    private val proot: Proot,
+    private val guest: LinuxGuest,
     /** Where [family] and [em] are saved; Runtime calls [write] when they change. */
     private val style: StyleStore,
 ) {
@@ -85,7 +85,7 @@ class TerminalFont(
         val found =
             withContext(Dispatchers.IO) {
                 sortedSetOf<String>().also { found ->
-                    runCatching { proot.run(LIST_FAMILIES) { it.trim().takeIf(::isTextFont)?.let(found::add) } }
+                    runCatching { guest.run(LIST_FAMILIES) { it.trim().takeIf(::isTextFont)?.let(found::add) } }
                         .onFailure { Log.w(TAG, "can't list fonts", it) }
                 }
             }
@@ -147,7 +147,7 @@ class TerminalFont(
         if (density == 0f) return
         size = pointSize(density, fontScale, scale, em)
         val content = "[main]\nfont=$family:size=${format(size)}\n"
-        val file = File(proot.home, PATH.removePrefix("~/"))
+        val file = File(guest.home, PATH.removePrefix("~/"))
         if (content == written && file.isFile) return
         written = content
         runCatching {

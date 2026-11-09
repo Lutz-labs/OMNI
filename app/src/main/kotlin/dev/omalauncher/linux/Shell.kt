@@ -126,7 +126,7 @@ class OutputTail(
  * line to [onLine]. Returns the exit code; a command that can't start
  * throws.
  */
-fun Proot.run(
+fun LinuxGuest.run(
     script: String,
     onLine: (String) -> Unit = {},
 ): Int {
@@ -162,7 +162,7 @@ internal fun forEachOutputLine(
 }
 
 /** Like [run], reporting the tail of the output to [report] as it comes. Returns success and the tail. */
-fun Proot.runJob(
+fun LinuxGuest.runJob(
     script: String,
     tail: OutputTail = OutputTail(),
     report: (List<String>) -> Unit = {},
@@ -181,7 +181,7 @@ fun Proot.runJob(
  * tail as it comes, then Idle or Failed. With [lock], it waits for it first
  * and shows waiting meanwhile. Returns success and the tail.
  */
-suspend fun Proot.trackedJob(
+suspend fun LinuxGuest.trackedJob(
     @StringRes action: Int,
     script: String,
     lock: Mutex? = null,

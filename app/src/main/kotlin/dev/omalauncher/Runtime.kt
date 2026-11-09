@@ -42,15 +42,19 @@ import dev.omalauncher.chroot.BackendLifecycle
 import dev.omalauncher.chroot.BackendSelector
 import dev.omalauncher.chroot.ChrootBackend
 import dev.omalauncher.chroot.activeBackendReady
-import dev.omalauncher.chroot.chrootGuestFs
 import dev.omalauncher.chroot.launchTarget
 import dev.omalauncher.chroot.LaunchTarget
 import dev.omalauncher.backend.BackendState
 import dev.omalauncher.backend.drainProcessBlocking
+import dev.omalauncher.linux.ChrootGuest
 import dev.omalauncher.linux.GuestFs
+import dev.omalauncher.linux.LinuxGuest
+import dev.omalauncher.linux.PkgManager
+import dev.omalauncher.linux.ProotGuest
 import dev.omalauncher.theme.Style
 import dev.omalauncher.theme.StyleStore
 import dev.omalauncher.theme.ThemeStore
+import kotlinx.coroutines.flow.first
 import dev.omalauncher.ui.Gestures
 import dev.omalauncher.ui.KeyboardBridge
 import dev.omalauncher.ui.SettingsPage
@@ -118,6 +122,21 @@ class Runtime(
     /** Where the chroot backend stands, for settings and future UI; null when it isn't usable. */
     val chrootState: kotlinx.coroutines.flow.StateFlow<BackendState>? get() = chrootBackend?.state
 
+    private val prootGuest = ProotGuest(proot)
+    private val chrootGuest: ChrootGuest? by lazy { chrootBackend?.let { ChrootGuest(it, context.filesDir) } }
+
+    /**
+     * The ACTIVE guest: the Kali chroot backend when one exists, otherwise the
+     * legacy PRoot/Arch guest. Consumers receive this instead of Proot, so the
+     * same path/exec/lifecycle contract works against whichever backend is
+     * current; the Arch install, pacman and the proot shell pool are handed
+     * [prootGuest] explicitly and only run while no chroot backend exists.
+     */
+    val guest: LinuxGuest get() = chrootGuest ?: prootGuest
+
+    /** Package operations for the ACTIVE guest: apt/dpkg on Kali, pacman on the legacy Arch guest. */
+    val pkgManager by lazy { PkgManager(guest) }
+
     /**
      * The guest filesystem view UI and file consumers browse: the Kali
      * rootfs when the chroot backend is active, the legacy proot guest fs
@@ -125,36 +144,33 @@ class Runtime(
      * behaviour beyond which rootfs they map to.
      */
     val guestFileBridge: GuestFs
-        get() = chrootBackend?.let { chrootGuestFs(it, it.rootfs) } ?: proot.guestFs
+        get() = guest.guestFs
 
     val wm = WindowManager()
     val server = WaylandServer(proot.waylandSocket.path, wm).also { wm.server = it }
-    private val guestImages = GuestImages(context, File(proot.tmpDir, "clipboard"), proot::guestPath)
+    private val guestImages = GuestImages(context, File(guest.tmpDir, "clipboard"), guest::guestPath)
     val keyboard = KeyboardBridge(wm, guestImages)
     val terminals = TerminalTiles(this)
     val style = StyleStore(context)
-    val terminalFont = TerminalFont(proot, style)
-    val launcherFont = LauncherFont(proot, style, context.resources).also { it.restore() }
+    val terminalFont = TerminalFont(guest, style)
+    val launcherFont = LauncherFont(guest, style, context.resources).also { it.restore() }
     val gestures = Gestures(context, style)
-    /** Linux app sources follow the ACTIVE backend: Kali rootfs when the chroot backend is present, else the Arch guest. */
-    private fun guestPath(
-        guest: String,
-        legacy: File,
-    ): File = chrootBackend?.guestFile(guest) ?: legacy
-
-    private val guestLinuxApplications get() = guestPath("/root/.local/share/applications", proot.applications)
-    private val guestLinuxSystemApplications get() = guestPath("/usr/share/applications", File(proot.rootfs, "usr/share/applications"))
-    private val guestLinuxRootfs get() = chrootBackend?.rootfs ?: proot.rootfs
+    private val guestLinuxApplications get() = guest.applications
+    private val guestLinuxSystemApplications get() = File(guest.rootfs, "usr/share/applications")
+    private val guestLinuxRootfs get() = guest.rootfs
 
     val linuxApps = LinuxAppCatalog(context, { guestLinuxApplications }, { guestLinuxSystemApplications }, { guestLinuxRootfs })
     val androidApps = AndroidAppCatalog(context)
     val usage = AppUsage(context)
-    val themes = ThemeStore(context, proot, style, isLinux = { linux }, onConfigChanged = ::syncGuest)
-    private val audio = AudioBridge(proot)
-    private val openBridge = OpenBridge(context, proot, onOpenFiles = ::openFiles, onOpenVoice = ::openVoice, onEdit = ::edit)
-    val agents = AgentStore(proot, text = { id, arg -> context.getString(id, arg) }, onChanged = ::syncGuest)
-    val pacman = Pacman(context, proot)
-    val widgets = WidgetEngine(context, proot, this)
+    val themes = ThemeStore(context, guest, style, isLinux = { linux }, onConfigChanged = ::syncGuest)
+    private val audio = AudioBridge(guest)
+    private val openBridge = OpenBridge(context, guest, onOpenFiles = ::openFiles, onOpenVoice = ::openVoice, onEdit = ::edit)
+    val agents = AgentStore(guest, text = { id, arg -> context.getString(id, arg) }, onChanged = ::syncGuest)
+    val pacman = Pacman(context, prootGuest)
+    // Widgets are the NEXT migration group: their command path is the proot
+    // shell protocol, so they stay on the legacy guest until that group is
+    // adapted to the chroot pool. Their files follow the legacy rootfs too.
+    val widgets = WidgetEngine(context, prootGuest, this)
 
     /** Widgets' speech(...) and android.speech. */
     val dictation = Dictation(context)
@@ -166,21 +182,21 @@ class Runtime(
     val calendar = PhoneCalendar(context)
 
     /** `omalauncher` in the guest (and `phone`, its old name): location, calendar and AirPods for agents, as far as widgets were allowed them. */
-    private val phoneBridge by lazy { PhoneBridge(context, proot, location, calendar, { widgets.airpods }, scope) }
+    private val phoneBridge by lazy { PhoneBridge(context, guest, location, calendar, { widgets.airpods }, scope) }
 
     /** The voice screen's replies, in the phone's voice. */
     val speaker = Speaker(context)
 
     /** A spoken conversation with a coding agent: the voice screen's (VoiceActivity). */
-    private val voiceSession = lazy { VoiceSession(context, proot, agents, speaker) }
+    private val voiceSession = lazy { VoiceSession(context, guest, agents, speaker) }
     val voice by voiceSession
 
     init {
         // Not started just for this: a Voice that never ran has nothing to stop.
         agents.release = { agent -> voiceSession.isInitialized() && voice.release(agent.bin) }
     }
-    val updates = SystemUpdates(proot, pacman, agents)
-    val gpu = Gpu(context, proot, pacman)
+    val updates = SystemUpdates(guest, pkgManager, agents)
+    val gpu = Gpu(context, guest, pkgManager)
 
     /** The launcher's own provided files (default widgets, their docs); see [Provisioner]. */
     private val launcherFiles = Provisioner(proot.filesDir, LauncherData.LAUNCHER_MANIFEST, listOf(widgets::managed, style::managed))
@@ -191,18 +207,18 @@ class Runtime(
             proot.filesDir,
             LauncherData.GUEST_MANIFEST,
             listOf(
-                { defaultApps(proot.applications) },
-                { bundledIcons(context, proot.home) },
+                { defaultApps(guest.applications) },
+                { bundledIcons(context, guest.home) },
                 openBridge::managed,
                 { phoneBridge.managed() },
-                proot::managed,
+                guest::managed,
                 pacman::managed,
                 agents::managed,
                 themes::managed,
                 widgets::guestManaged,
             ),
         )
-    val bootstrap = Bootstrap(context, proot, agents, pacman, provisioner)
+    val bootstrap = Bootstrap(context, prootGuest, agents, pacman, provisioner)
 
     /** Its jobs write files and start the guest; one that fails (storage full) mustn't take the home screen down. */
     private val scope =
@@ -302,11 +318,23 @@ class Runtime(
             style.start()
             // On the first-run screen the download is the screen's job, with progress.
             if (launcherReady) scope.launch { themes.ensureRelease() }
-            if (bootstrap.wanted) runLinux { bootstrap.run() } else bootstrap.run()
+            // The Arch install only runs when there is no chroot backend; with
+            // one, the chroot prepare below is the whole setup.
+            if (chrootBackend == null) {
+                if (bootstrap.wanted) runLinux { bootstrap.run() } else bootstrap.run()
+            }
             // The chroot backend prepares independently: mounts are global and
-            // presence-guarded, so this never disturbs the legacy flow. No
-            // consumer uses it yet; failure only marks its state.
+            // presence-guarded, so this never disturbs the legacy flow. A
+            // failed prepare only marks its state; Linux stays not-ready.
             chrootLifecycle?.prepare()
+            // When the chroot becomes Ready the bridges and the Wayland server
+            // come up the same way a finished Arch install brings them up.
+            scope.launch {
+                if (chrootBackend != null) {
+                    chrootState?.first { it == BackendState.Ready }
+                    onLinuxReady()
+                }
+            }
         }
     }
 
@@ -318,19 +346,58 @@ class Runtime(
     }
 
     /** Installs Linux in the background, with [agents]; progress shows in [Bootstrap.state] and the notification. */
-    fun installLinux(agents: List<Agent>) = runLinux { bootstrap.install(agents) }
+    fun installLinux(agents: List<Agent>) {
+        // With a chroot backend, "installing Linux" prepares the backend (mounts
+        // + shell pool); the Arch download/install only runs without one.
+        if (chrootBackend != null) return prepareChroot()
+        runLinux { bootstrap.install(agents) }
+    }
+
+    /** With a chroot backend: prepare it (or re-prepare after a failure), like an install. */
+    private fun prepareChroot() {
+        if (linuxJob?.isActive == true) return
+        linuxJob =
+            scope.launch {
+                setService(true)
+                withContext(Dispatchers.IO) { chrootLifecycle?.prepare() }
+                setService(false)
+            }
+    }
 
     /** Continues a failed install, or a failed update of an installed system. */
-    fun retryLinux() = runLinux { bootstrap.run() }
+    fun retryLinux() {
+        if (chrootBackend != null) {
+            // A failed chroot prepare: close (so the next prepare may run again) and retry.
+            scope.launch {
+                setService(true)
+                withContext(Dispatchers.IO) {
+                    chrootLifecycle?.close()
+                    chrootLifecycle?.prepare()
+                }
+                setService(false)
+            }
+            return
+        }
+        runLinux { bootstrap.run() }
+    }
 
     /** Stops an install that hasn't completed, running or failed, and deletes what it downloaded and unpacked. */
     fun cancelLinux() {
+        if (chrootBackend != null) {
+            // Cancelling a chroot prepare stops the backend's state; mounts stay
+            // (presence-guarded, never auto-unmounted) by policy.
+            scope.launch {
+                withContext(Dispatchers.IO) { chrootLifecycle?.close() }
+                setService(false)
+            }
+            return
+        }
         val install = linuxJob
         if (!bootstrap.cancel()) return
         linuxJob =
             scope.launch {
                 install?.cancel()
-                withContext(Dispatchers.IO) { proot.killAll() }
+                withContext(Dispatchers.IO) { if (chrootBackend == null) proot.killAll() }
                 install?.join()
                 bootstrap.remove()
                 setService(false)
@@ -344,7 +411,9 @@ class Runtime(
             scope.launch {
                 setService(true)
                 withContext(Dispatchers.IO) {
-                    if (!prepared) {
+                    // The legacy Arch guest prepares its /tmp, runtime dir and
+                    // /proc stand-ins; the chroot backend needs none of it.
+                    if (chrootBackend == null && !prepared) {
                         proot.prepare()
                         prepared = true
                     }
@@ -359,6 +428,7 @@ class Runtime(
      * the home screen stay; widgets that need Linux turn back into placeholders.
      */
     fun removeLinux() {
+        if (chrootBackend != null) return removeChrootLinux()
         if (!bootstrap.isInstalled || linuxJob?.isActive == true) return
         linuxJob =
             scope.launch {
@@ -369,6 +439,39 @@ class Runtime(
                 withContext(Dispatchers.IO) { proot.killAll() }
                 bootstrap.remove()
                 withContext(Dispatchers.IO) {
+                    updates.forget()
+                    agents.load()
+                }
+                gpu.turnOff()
+                linuxApps.clear()
+                setService(false)
+            }
+    }
+
+    /**
+     * "Removing Linux" with a chroot backend removes what the launcher manages
+     * in the Kali guest (apps, configs, agent state) and stops the bridges —
+     * never the Kali rootfs itself, which is shared with the user's own
+     * chroot sessions and is kept.
+     */
+    private fun removeChrootLinux() {
+        if (linuxJob?.isActive == true) return
+        linuxJob =
+            scope.launch {
+                launcherFont.forget()
+                widgets.linuxChanged(false)
+                audio.stop()
+                withContext(Dispatchers.IO) {
+                    chrootLifecycle?.close()
+                    for (dir in
+                        listOf(
+                            guest.applications,
+                            guest.launcherConfig,
+                            File(guest.home, ".local/share/mise"),
+                            File(guest.home, ".local/state"),
+                        )) {
+                        runCatching { LauncherData.deleteTree(dir) }
+                    }
                     updates.forget()
                     agents.load()
                 }
@@ -393,29 +496,31 @@ class Runtime(
     private var servicesStarted = false
 
     private suspend fun onLinuxReady() {
-        if (linux) return
-        if (!servicesStarted) {
-            servicesStarted = true
-            updateOutput()
-            val clipboard = AndroidClipboard(context, guestImages, server::clipboardChanged)
-            synchronized(server) { server.selection.system = clipboard }
-            context.registerComponentCallbacks(
-                object : ComponentCallbacks {
-                    override fun onConfigurationChanged(newConfig: Configuration) = updateOutput()
-
-                    @Deprecated("Deprecated in Java")
-                    override fun onLowMemory() = Unit
-                },
-            )
-            withContext(Dispatchers.IO) {
-                server.start()
-                proot.procShim.start()
-                openBridge.start()
-                phoneBridge.start()
-            }
-        } else {
-            // Linux installed again: its new home has no foot-font.ini yet.
+        if (servicesStarted) {
+            // Linux installed again (or the chroot re-prepared): its new home
+            // has no foot-font.ini yet.
             terminalFont.write()
+            return
+        }
+        servicesStarted = true
+        updateOutput()
+        val clipboard = AndroidClipboard(context, guestImages, server::clipboardChanged)
+        synchronized(server) { server.selection.system = clipboard }
+        context.registerComponentCallbacks(
+            object : ComponentCallbacks {
+                override fun onConfigurationChanged(newConfig: Configuration) = updateOutput()
+
+                @Deprecated("Deprecated in Java")
+                override fun onLowMemory() = Unit
+            },
+        )
+        withContext(Dispatchers.IO) {
+            server.start()
+            // The /proc stand-ins exist only for proot's Arch guest; the chroot
+            // mounts a real /proc.
+            if (chrootBackend == null) proot.procShim.start()
+            openBridge.start()
+            phoneBridge.start()
         }
 
         // A font picked from Linux that wasn't remembered at start (or was installed since) loads now.
@@ -500,14 +605,14 @@ class Runtime(
     private var screens = 0
 
     fun screenStarted() {
-        if (screens++ == 0) proot.procShim.setActive(true)
+        if (screens++ == 0) if (chrootBackend == null) proot.procShim.setActive(true)
         // Only checks when the last check is hours old; see SystemUpdates.
         if (linux) scope.launch { updates.check() }
     }
 
     fun screenStopped() {
         screens = (screens - 1).coerceAtLeast(0)
-        if (screens == 0) proot.procShim.setActive(false)
+        if (screens == 0) if (chrootBackend == null) proot.procShim.setActive(false)
     }
 
     /** Whether every kind of app has been listed once: Android's, Linux's and owl's. Before, a list of them would be missing some. */
@@ -757,7 +862,7 @@ class Runtime(
             }
             LaunchTarget.PROOT -> {
                 thread(name = "guest-launch", isDaemon = true) {
-                    val code = runCatching { proot.run("exec $command") { Log.i(TAG, "[${command.take(24)}] $it") } }.getOrElse { -1 }
+                    val code = runCatching { prootGuest.run("exec $command") { Log.i(TAG, "[${command.take(24)}] $it") } }.getOrElse { -1 }
                     Log.i(TAG, "exited $code: $command")
                     onExit()
                 }

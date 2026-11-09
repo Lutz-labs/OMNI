@@ -44,6 +44,21 @@ class ChrootBackend(
     /** The rootfs directory the backend runs on. */
     val rootfs: File get() = File(config.rootfs)
 
+    /** The runtime config, for consumers that map guest paths or build raw processes. */
+    internal val runtimeConfig: ChrootConfig get() = config
+
+    /** A raw guest process (independent pipes, not registered); the caller manages its lifecycle. */
+    fun processBuilder(script: String): ProcessBuilder =
+        requireFactory().spawn(script, cwd = config.guestHome, token = "raw-${UUID.randomUUID()}")
+
+    /** Merges `K=V` pairs into every subsequent guest process's environment. */
+    fun updateGuestEnv(env: List<String>) {
+        for (pair in env) {
+            val i = pair.indexOf('=')
+            if (i > 0) config.env[pair.substring(0, i)] = pair.substring(i + 1)
+        }
+    }
+
     private val ledgerFile = File(stateDir, "chroot-state.ledger")
 
     private var escalator: dev.omalauncher.backend.Escalator? = null

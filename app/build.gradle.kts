@@ -47,6 +47,10 @@ android {
     // android.util.Log and friends are no-ops in JVM tests instead of throwing.
     testOptions { unitTests.isReturnDefaultValues = true }
 
+    // Project lint policy: lint.xml disables MissingTranslation for the brand
+    // label (see the file); every other rule stays enabled.
+    lint { lintConfig = file("lint.xml") }
+
     signingConfigs {
         create("release") {
             uploadKey?.let {

@@ -39,7 +39,7 @@ import dev.omalauncher.linux.Agent
 import dev.omalauncher.linux.LinuxState
 import dev.omalauncher.linux.agentInvocation
 import dev.omalauncher.linux.GuestShell
-import dev.omalauncher.linux.Proot
+import dev.omalauncher.linux.LinuxGuest
 import dev.omalauncher.linux.ShellPool
 import dev.omalauncher.linux.ShellResult
 import dev.omalauncher.SecretBox
@@ -161,12 +161,12 @@ private const val NOTIFY_CHANNEL = "widgets"
  */
 class WidgetServices(
     private val context: Context,
-    private val proot: Proot,
+    private val guest: LinuxGuest,
     private val runtime: Runtime,
     private val scope: CoroutineScope,
 ) : Services {
     /** Sources share a few shells, so one slow command doesn't stall the rest. */
-    val shells = ShellPool(proot, 3)
+    val shells = ShellPool(guest, 3)
 
     /** Actions get their own shell: a long run(...) never delays widget updates. */
     private val actionShell = GuestShell(proot)
@@ -365,7 +365,7 @@ class WidgetServices(
 
     override fun guestFile(path: String): File? {
         val p = if (path.startsWith("~/")) Proot.GUEST_HOME + "/" + path.removePrefix("~/") else path
-        return proot.guestFile(p)
+        return guest.guestFile(p)
     }
 
     /** The phone itself, which the guest can't identify: it has no DMI tables, and /system isn't mounted. */

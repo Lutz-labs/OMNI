@@ -154,7 +154,7 @@ private class Step(
  */
 class Bootstrap(
     private val context: Context,
-    private val proot: Proot,
+    private val guest: LinuxGuest,
     private val agents: AgentStore,
     private val pacman: Pacman,
     /** The guest's files; see [Provisioner]. */
@@ -173,17 +173,17 @@ class Bootstrap(
     val updates = _updates.asStateFlow()
 
     private val log = OutputTail(200)
-    private val journal = StepJournal(File(proot.filesDir, "rootfs-steps.json"))
+    private val journal = StepJournal(File(guest.filesDir, "rootfs-steps.json"))
 
     /** The agents picked when installing Linux, one bin per line; its existence means an install was started. */
-    private val choiceFile get() = File(proot.filesDir, "setup-agents")
+    private val choiceFile get() = File(guest.filesDir, "setup-agents")
 
     /** The coding agents setup installs, in the order they were listed. */
     val chosenAgents: List<Agent>
         get() = runCatching { choiceFile.readLines() }.getOrDefault(emptyList()).mapNotNull { bin -> AGENTS.find { it.bin == bin } }
 
     fun choose(picked: List<Agent>) {
-        proot.filesDir.mkdirs()
+        guest.filesDir.mkdirs()
         choiceFile.writeText(picked.joinToString("") { it.bin + "\n" })
     }
 
@@ -206,7 +206,7 @@ class Bootstrap(
                 guest("pacman -Rdd --noconfirm linux-aarch64 \$(pacman -Qq | grep ^linux-firmware); true")
             },
             Step("packages-1", Stage.Packages, R.string.linux_step_packages, network = true) { guest(pacmanInstall(PACKAGES, refresh = true)) },
-            Step("keymap-1", Stage.Packages, R.string.linux_step_keymap, network = false, isDone = { proot.keymap.exists() }) { compileKeymap() },
+            Step("keymap-1", Stage.Packages, R.string.linux_step_keymap, network = false, isDone = { guest.keymap.exists() }) { compileKeymap() },
             Step("cliamp-$CLIAMP_VERSION", Stage.Packages, R.string.linux_step_cliamp, network = true) { installCliamp() },
             // Omarchy's themes were a step here ("omarchy-<ref>") until Linux became optional; ThemeStore fetches them now.
         )
@@ -243,7 +243,7 @@ class Bootstrap(
                     !choiceFile.exists() -> {
                         _state.value = LinuxState.NotInstalled
                         // Left by a removal that didn't finish (the app was killed, or a file resisted).
-                        if (proot.rootfs.exists()) runCatching { LauncherData.deleteTree(proot.rootfs) }.onFailure { Log.e(TAG, "leftover rootfs", it) }
+                        if (guest.rootfs.exists()) runCatching { LauncherData.deleteTree(guest.rootfs) }.onFailure { Log.e(TAG, "leftover rootfs", it) }
                         return@withContext
                     }
                     else -> setup()
@@ -299,7 +299,7 @@ class Bootstrap(
             backlog = emptyList()
             pacman.lock.withLock {
                 try {
-                    LauncherData.deleteTree(proot.rootfs)
+                    LauncherData.deleteTree(guest.rootfs)
                 } catch (e: Exception) {
                     // Whatever is left can't run; a later install unpacks over a fresh directory anyway.
                     Log.e(TAG, "rootfs not fully deleted", e)
@@ -307,7 +307,7 @@ class Bootstrap(
                 journal.reset()
                 provisioner.forgetAll()
                 choiceFile.delete()
-                proot.keymap.delete()
+                guest.keymap.delete()
                 context.cacheDir.listFiles { f -> f.name.startsWith(TARBALL) }?.forEach { it.delete() }
                 log.clear()
                 cancelled = false
@@ -423,7 +423,7 @@ class Bootstrap(
         // Unpacking replaces the rootfs: the user's home, packages and agents. Only ever before a setup finished.
         check(!journal.setupComplete) { "refusing to replace a set-up system" }
         // A half-unpacked rootfs from an earlier try only takes up room the download needs.
-        LauncherData.deleteTree(proot.rootfs)
+        LauncherData.deleteTree(guest.rootfs)
         val tarball =
             try {
                 obtainTarball()
@@ -435,7 +435,7 @@ class Bootstrap(
         } catch (e: Exception) {
             if (e is NoRetry || e is CancellationException || e.outOfSpace()) {
                 // The download is fine and kept for the next try; what was unpacked gives its room back.
-                runCatching { LauncherData.deleteTree(proot.rootfs) }
+                runCatching { LauncherData.deleteTree(guest.rootfs) }
                 throw if (e is NoRetry || e is CancellationException) e else outOfSpace(e)
             }
             // A truncated or bogus download (a captive portal's page) would fail every retry otherwise.
@@ -447,7 +447,7 @@ class Bootstrap(
 
     /** Stops before writing when the app's storage has less than [bytes] free: a full phone fails at once, not after the download. */
     private fun requireSpace(bytes: Long) {
-        val free = proot.filesDir.usableSpace
+        val free = guest.filesDir.usableSpace
         if (free < bytes) {
             throw NoRetry(text(R.string.linux_error_no_space, gigabytes(bytes), gigabytes(free)))
         }
@@ -529,7 +529,7 @@ class Bootstrap(
 
     private fun extract(tarball: File) {
         report(Stage.Extract, text(R.string.linux_step_extract_start), 0f)
-        val root = proot.rootfs
+        val root = guest.rootfs
         LauncherData.deleteTree(root)
         requireSpace(SYSTEM_SPACE)
         root.mkdirs()
@@ -577,7 +577,7 @@ class Bootstrap(
             name.startsWith("dev/")
 
     private fun configure() {
-        val root = proot.rootfs
+        val root = guest.rootfs
         File(root, "etc/resolv.conf").apply {
             delete()
             writeText("nameserver 8.8.8.8\nnameserver 1.1.1.1\n")
@@ -586,7 +586,7 @@ class Bootstrap(
         File(root, "etc/locale.conf").writeText("LANG=C.UTF-8\n")
         // The geo-balanced default mirror often lags behind; pacman falls through this list on 404s.
         File(root, "etc/pacman.d/mirrorlist").writeText(MIRRORS.joinToString("") { "Server = http://$it/\$arch/\$repo\n" })
-        // pacman drops privileges and uses Landlock for downloads; neither works under proot.
+        // pacman drops privileges and uses Landlock for downloads; neither works under guest.
         // Its low-speed timeout aborts big packages on slow phone connections, every retry.
         val conf = File(root, "etc/pacman.conf")
         conf.writeText(
@@ -603,7 +603,7 @@ class Bootstrap(
                 "/usr/lib/xkbcommon/xkbcli-compile-keymap --layout us > /tmp/keymap.xkb",
         )
         // Clients mmap the keymap and parse it as a C string.
-        writeAtomically(proot.keymap, proot.hostFile("/tmp/keymap.xkb").readBytes() + 0)
+        writeAtomically(guest.keymap, guest.hostFile("/tmp/keymap.xkb").readBytes() + 0)
     }
 
     /**
@@ -611,7 +611,7 @@ class Bootstrap(
      * doubles needs more heap than small phones give an app (48 MB on a 2 GB Android 10 device).
      */
     private fun installCliamp() {
-        val target = File(proot.rootfs, "usr/local/bin/cliamp")
+        val target = File(guest.rootfs, "usr/local/bin/cliamp")
         val tmp = File(target.parentFile, ".cliamp.download")
         val digest = MessageDigest.getInstance("SHA-256")
         // Runs under pacman's lock, so a stalled download must time out rather than hold it.
@@ -647,7 +647,7 @@ class Bootstrap(
      * forever (#105), and the next step, pacman-key, would hang without a word. Such a phone gets an error naming the cause.
      */
     private fun checkForks() {
-        val process = proot.process("echo forks | cat").start()
+        val process = guest.process("echo forks | cat").start()
         val output = StringBuffer()
         val reader = thread(isDaemon = true) { runCatching { process.inputStream.bufferedReader().forEachLine { output.appendLine(it) } } }
         if (process.waitFor(FORK_CHECK_SECONDS, TimeUnit.SECONDS)) {
@@ -657,8 +657,8 @@ class Bootstrap(
             return
         }
         process.destroyForcibly()
-        // The guest shell is proot's tracee and outlives a killed proot.
-        proot.killAll()
+        // The guest shell is proot's tracee and outlives a killed guest.
+        guest.killAll()
         log.add("a guest command that starts another one didn't finish in $FORK_CHECK_SECONDS s (kernel ${System.getProperty("os.version")})")
         error(text(R.string.linux_error_kernel))
     }
@@ -670,7 +670,7 @@ class Bootstrap(
 
     private fun guest(script: String) {
         log.add("$ $script")
-        val code = proot.run(script) { line -> if (log.add(line)) report(stage, step) }
+        val code = guest.run(script) { line -> if (log.add(line)) report(stage, step) }
         check(code == 0) { text(R.string.linux_error_command, script.take(60), code) }
     }
 }

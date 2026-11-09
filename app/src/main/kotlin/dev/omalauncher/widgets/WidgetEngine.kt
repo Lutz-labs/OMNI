@@ -19,7 +19,7 @@ import dev.omalauncher.BuildConfig
 import dev.omalauncher.LauncherData
 import dev.omalauncher.Runtime
 import dev.omalauncher.linux.Agent
-import dev.omalauncher.linux.Proot
+import dev.omalauncher.linux.LinuxGuest
 import dev.omalauncher.linux.pacmanInstall
 import dev.omalauncher.linux.runJob
 import dev.omalauncher.ui.Palette
@@ -88,7 +88,7 @@ fun List<WidgetSpec>.app(file: String) = firstOrNull { it.file.name == file && i
  */
 class WidgetEngine(
     private val context: Context,
-    private val proot: Proot,
+    private val guest: LinuxGuest,
     private val runtime: Runtime,
 ) {
     /** Outside the rootfs, so widgets work without Linux; the guest sees it at ~/[GUEST_DIR]. */
@@ -1026,7 +1026,7 @@ class WidgetEngine(
         if (packages.isEmpty() || installs[name] == Install.Running) return
         installs[name] = Install.Running
         scope.launch {
-            val (ok, tail) = runtime.pacman.lock.withLock { withContext(Dispatchers.IO) { proot.runJob(pacmanInstall(packages)) } }
+            val (ok, tail) = runtime.pacman.lock.withLock { withContext(Dispatchers.IO) { guest.runJob(pacmanInstall(packages)) } }
             if (ok) installs.remove(name) else installs[name] = Install.Failed(tail.toString())
             // Other widgets may have been waiting on the same packages.
             checkDependencies(specs.toList())
@@ -1059,9 +1059,9 @@ class WidgetEngine(
 
     /** Agents look for AGENTS.md / CLAUDE.md in the guest home; these point them at the widget docs. */
     fun guestManaged(): List<Managed> =
-        listOf("AGENTS.md", "CLAUDE.md").map { Managed.text(File(proot.home, it), Policy.Seeded) { AGENT_POINTER } } +
+        listOf("AGENTS.md", "CLAUDE.md").map { Managed.text(File(guest.home, it), Policy.Seeded) { AGENT_POINTER } } +
             listOf("owl-check", "owl-send").map { bin ->
-                Managed.asset(context, "$bin.sh", File(proot.rootfs, "usr/local/bin/$bin"), Policy.Owned, executable = true)
+                Managed.asset(context, "$bin.sh", File(guest.rootfs, "usr/local/bin/$bin"), Policy.Owned, executable = true)
             }
 
     companion object {

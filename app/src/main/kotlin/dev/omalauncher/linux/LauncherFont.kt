@@ -26,11 +26,11 @@ import kotlin.math.abs
  * isn't a box. Main thread.
  */
 class LauncherFont(
-    private val proot: Proot,
+    private val guest: LinuxGuest,
     private val style: StyleStore,
     private val resources: Resources,
 ) {
-    private val cache = File(proot.filesDir, "launcher-font")
+    private val cache = File(guest.filesDir, "launcher-font")
 
     /** Android's monospace with the symbols; Android's alone if its file isn't where AOSP keeps it. */
     private val system: FontFamily by lazy {
@@ -95,7 +95,7 @@ class LauncherFont(
     /** The faces [family] has in the guest, as fontconfig lists them; empty without Linux or the family. */
     private fun find(family: String): List<Face> {
         val faces = mutableListOf<Face>()
-        runCatching { proot.run("fc-list -f '%{weight}\\t%{slant}\\t%{file}\\n' " + shellQuote(":spacing=100:family=" + escape(family))) { line -> parse(line)?.let(faces::addAll) } }
+        runCatching { guest.run("fc-list -f '%{weight}\\t%{slant}\\t%{file}\\n' " + shellQuote(":spacing=100:family=" + escape(family))) { line -> parse(line)?.let(faces::addAll) } }
             .onFailure { Log.w(TAG, "can't list $family's files", it) }
         return faces.distinctBy { it.weight to it.italic }
     }
@@ -105,7 +105,7 @@ class LauncherFont(
         val lines = runCatching { cache.readLines() }.getOrNull() ?: return null
         if (lines.firstOrNull() != family) return null
         val faces = lines.drop(1).mapNotNull(Face::decode)
-        return faces.takeIf { it.isNotEmpty() && it.all { face -> proot.guestFile(face.path)?.isFile == true } }
+        return faces.takeIf { it.isNotEmpty() && it.all { face -> guest.guestFile(face.path)?.isFile == true } }
     }
 
     private fun save(
@@ -134,7 +134,7 @@ class LauncherFont(
         val fonts =
             faces.mapNotNull { face ->
                 // Paths fontconfig in the guest gave, so read as the guest sees them.
-                val file = (if (guestPaths) proot.guestFile(face.path) else File(face.path)) ?: return@mapNotNull null
+                val file = (if (guestPaths) guest.guestFile(face.path) else File(face.path)) ?: return@mapNotNull null
                 // A variable font's file is every weight; the axis picks this one, as Compose's Font(file) does.
                 runCatching {
                     Font.Builder(file)

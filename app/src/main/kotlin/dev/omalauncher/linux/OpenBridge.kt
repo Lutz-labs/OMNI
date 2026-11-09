@@ -19,13 +19,13 @@ private const val TAG = "open"
  */
 class OpenBridge(
     private val context: Context,
-    private val proot: Proot,
+    private val guest: LinuxGuest,
     private val onOpenFiles: (String) -> Unit,
     private val onOpenVoice: () -> Unit,
     /** A guest path to edit, and the host path of the FIFO that gets the reply once it's closed. */
     private val onEdit: (String, String) -> Unit,
 ) {
-    private val fifo = File(proot.runtimeDir, "open.fifo")
+    private val fifo = File(guest.runtimeDir, "open.fifo")
     private val guestFifo = "${Proot.GUEST_RUNTIME_DIR}/${fifo.name}"
 
     private var started = false
@@ -58,7 +58,7 @@ class OpenBridge(
         // Written by the omarchy-edit shim: its reply FIFO (no spaces, made by mktemp) and the file.
         if (url.startsWith(EDIT_PREFIX)) {
             val (reply, path) = url.removePrefix(EDIT_PREFIX).split(' ', limit = 2).takeIf { it.size == 2 } ?: return
-            return onEdit(path, proot.guestFile(reply)?.path ?: return)
+            return onEdit(path, guest.guestFile(reply)?.path ?: return)
         }
         if (!url.startsWith("http://") && !url.startsWith("https://")) {
             Log.i(TAG, "ignoring non-URL $url")
@@ -69,7 +69,7 @@ class OpenBridge(
 
     /** The shims; /usr/local/bin precedes /usr/bin, so xdg-open wins over xdg-utils if that's installed. */
     fun managed(): List<Managed> {
-        val bin = File(proot.rootfs, "usr/local/bin")
+        val bin = File(guest.rootfs, "usr/local/bin")
         return listOf(
             Managed.text(File(bin, "xdg-open"), Policy.Owned, executable = true) {
                 """

@@ -21,9 +21,9 @@ private const val MAX_BACKOFF_MS = 60_000L
  * Blocking AudioTrack writes pace the pipe, and so PulseAudio's clock.
  */
 class AudioBridge(
-    private val proot: Proot,
+    private val guest: LinuxGuest,
 ) {
-    private val fifo = File(proot.runtimeDir, "audio.fifo")
+    private val fifo = File(guest.runtimeDir, "audio.fifo")
     private val runtimeDir = Proot.GUEST_RUNTIME_DIR
 
     /** PulseAudio config: only the socket clients use and the pipe sink we read. */
@@ -73,8 +73,8 @@ class AudioBridge(
         running = true
         if (started) return
         started = true
-        proot.hostFile("/tmp/pulse.pa").writeText(config)
-        File(proot.runtimeDir, "pulse").mkdirs()
+        guest.hostFile("/tmp/pulse.pa").writeText(config)
+        File(guest.runtimeDir, "pulse").mkdirs()
         thread(name = "pulseaudio", isDaemon = true) { superviseDaemon() }
         thread(name = "audio-bridge", isDaemon = true) { pump() }
         thread(name = "audio-idle", isDaemon = true) { pauseWhenIdle() }
@@ -92,11 +92,18 @@ class AudioBridge(
             while (!running) Thread.sleep(1000)
             val started = SystemClock.elapsedRealtime()
             val code =
-                runCatching {
-                    proot.run("exec pulseaudio -n -F /tmp/pulse.pa --daemonize=no --use-pid-file=no --exit-idle-time=-1 --disable-shm=yes") {
-                        Log.i(TAG, "[pulseaudio] $it")
-                    }
-                }.getOrElse { -1 }
+                if (guest is ChrootGuest) {
+                    // The chroot backend bounds one-shot runs; a daemon must not
+                    // be bounded, so spawn it and wait on the process itself —
+                    // the supervisor restarts it when it exits, as before.
+                    runCatching { guest.process("exec pulseaudio -n -F /tmp/pulse.pa --daemonize=no --use-pid-file=no --exit-idle-time=-1 --disable-shm=yes").start().waitFor() }.getOrElse { -1 }
+                } else {
+                    runCatching {
+                        guest.run("exec pulseaudio -n -F /tmp/pulse.pa --daemonize=no --use-pid-file=no --exit-idle-time=-1 --disable-shm=yes") {
+                            Log.i(TAG, "[pulseaudio] $it")
+                        }
+                    }.getOrElse { -1 }
+                }
             if (SystemClock.elapsedRealtime() - started > MAX_BACKOFF_MS) backoff = 1000L
             Log.w(TAG, "pulseaudio exited $code; restarting in ${backoff / 1000} s")
             Thread.sleep(backoff)

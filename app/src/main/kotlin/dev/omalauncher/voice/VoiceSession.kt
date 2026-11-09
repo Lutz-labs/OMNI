@@ -18,7 +18,7 @@ import dev.omalauncher.linux.AGENTS
 import dev.omalauncher.linux.Agent
 import dev.omalauncher.linux.AgentStore
 import dev.omalauncher.linux.JobState
-import dev.omalauncher.linux.Proot
+import dev.omalauncher.linux.LinuxGuest
 import dev.omalauncher.linux.killTree
 import dev.omalauncher.ui.Speaker
 import dev.omalauncher.ui.Speech
@@ -38,7 +38,7 @@ import java.util.concurrent.Executors
  */
 class VoiceSession(
     private val context: Context,
-    private val proot: Proot,
+    private val guest: LinuxGuest,
     private val agents: AgentStore,
     private val speaker: Speaker,
 ) {
@@ -218,7 +218,7 @@ class VoiceSession(
         line: String,
     ) = files.execute {
         runCatching {
-            val log = File(proot.home, ".cache/omalauncher/voice-agent.log").apply { parentFile?.mkdirs() }
+            val log = File(guest.home, ".cache/omalauncher/voice-agent.log").apply { parentFile?.mkdirs() }
             if (log.length() > 1_000_000) log.writeText(log.readText().takeLast(500_000))
             log.appendText("${System.currentTimeMillis() % 100_000_000} $way ${line.take(4000)}\n")
         }
@@ -547,7 +547,7 @@ class VoiceSession(
         phase = Phase.Starting
         storage = PhoneStorage.granted()
         val p =
-            runCatching { proot.process(l.command(session)).redirectErrorStream(false).start() }.getOrElse {
+            runCatching { guest.process(l.command(session)).redirectErrorStream(false).start() }.getOrElse {
                 phase = Phase.Off
                 notice = str(R.string.voice_cant_start, a.name, it.message.orEmpty())
                 return
@@ -808,7 +808,7 @@ class VoiceSession(
 
     /** A picture it read, like a widget's preview: copied now, as the next owl-check overwrites it, after what it said so far. */
     private fun keepImage(guestPath: String) {
-        val source = proot.guestFile(guestPath)?.takeIf { it.isFile } ?: return
+        val source = guest.guestFile(guestPath)?.takeIf { it.isFile } ?: return
         endReply()
         val images = File(dir, "images").apply { mkdirs() }
         images.listFiles()?.sortedBy { it.name }?.dropLast(29)?.forEach { it.delete() }

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<lint>
+    <!-- Project policy: the settings_termux brand label is intentionally not
+         translated per locale (the product name stays "Termux" everywhere), and
+         the app never ships locale splits. MissingTranslation for that label is
+         therefore not actionable; the rule is disabled instead of adding
+         fake translations. All other lint rules stay enabled. -->
+    <issue id="MissingTranslation" severity="ignore" />
+</lint>

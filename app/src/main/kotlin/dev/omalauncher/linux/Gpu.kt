@@ -27,8 +27,8 @@ import java.io.FileNotFoundException
  */
 class Gpu(
     private val context: Context,
-    private val proot: Proot,
-    private val pacman: Pacman,
+    private val guest: LinuxGuest,
+    private val pkgManager: PkgManager,
 ) {
     private val prefs = LauncherData.prefs(context)
 
@@ -71,18 +71,18 @@ class Gpu(
     suspend fun recheck() {
         val driver = spec ?: return
         if (!wanted || active || state is JobState.Working) return
-        if (!proot.hostFile(driver.driverPath).isFile) return turnOff()
+        if (!guest.hostFile(driver.driverPath).isFile) return turnOff()
         // The APK carries a different Mesa than the guest has, or none was installed
         // yet (Mali before it used the patched Mesa). The env names that Mesa.
-        val mesaCurrent = runCatching { proot.hostFile(GpuDrivers.MESA_ZINK_STAMP).readText().trim() }
+        val mesaCurrent = runCatching { guest.hostFile(GpuDrivers.MESA_ZINK_STAMP).readText().trim() }
             .getOrNull() == GpuDrivers.MESA_ZINK_TAR_SHA256
         if (mesaCurrent && prefs.getString(CHECKED_BUILD, null) == build) {
             // An older install wrote Mali's manifest on pacman's path. The env now
             // names the /usr/local file, so that file has to exist before we activate.
-            if (!proot.hostFile(driver.icdPath).isFile) {
+            if (!guest.hostFile(driver.icdPath).isFile) {
                 retireLegacyManifest(driver)
                 if (!run(R.string.linux_job_installing, GpuDrivers.manifestScript(driver))) {
-                    proot.graphicsEnv = SOFTWARE_ENV
+                    guest.graphicsEnv = SOFTWARE_ENV
                     conceal(driver)
                     return
                 }
@@ -101,7 +101,7 @@ class Gpu(
         if (ok) {
             activate(driver)
         } else {
-            proot.graphicsEnv = SOFTWARE_ENV
+            guest.graphicsEnv = SOFTWARE_ENV
             conceal(driver)
         }
     }
@@ -114,16 +114,23 @@ class Gpu(
         wanted = true
         stageMesaBundle()
         retireLegacyManifest(driver)
+        // GPU drivers are Arch-specific (vendor tarballs + a patched Mesa zink
+        // built for the Arch guest); Kali has no mapped equivalent yet, so this
+        // fails closed into software rendering instead of pretending to install.
+        if (!pkgManager.arch) {
+            Log.w(TAG, "GPU drivers are not mapped for the Kali guest yet; staying on software rendering")
+            return turnOff()
+        }
         val script = GpuDrivers.installScript(driver) + " && " + GpuDrivers.probeScript(driver)
         // The install script runs pacman.
-        if (run(R.string.linux_job_installing, script, pacman.lock)) {
+        if (run(R.string.linux_job_installing, script, pkgManager.lock)) {
             activate(driver)
         } else {
             // Nothing to come back to on the next start; the failure stays on screen.
             prefs.edit().putBoolean(WANTED, false).apply()
             wanted = false
             active = false
-            proot.graphicsEnv = SOFTWARE_ENV
+            guest.graphicsEnv = SOFTWARE_ENV
             conceal(driver)
         }
     }
@@ -138,30 +145,30 @@ class Gpu(
         wanted = false
         active = false
         state = JobState.Idle
-        proot.graphicsEnv = SOFTWARE_ENV
+        guest.graphicsEnv = SOFTWARE_ENV
         spec?.let(::conceal)
     }
 
     private fun activate(driver: GpuDriver) {
         active = true
-        proot.graphicsEnv = driver.env
+        guest.graphicsEnv = driver.env
     }
 
     /** Drops the manifest so a later app cannot load the driver by the default search path. */
     private fun conceal(driver: GpuDriver) {
-        proot.hostFile(driver.icdPath).delete()
+        guest.hostFile(driver.icdPath).delete()
         retireLegacyManifest(driver)
     }
 
     /** Before writing the /usr/local manifest, and on the way out. */
-    private fun retireLegacyManifest(driver: GpuDriver) = GpuDrivers.retireLegacyManifest(driver, proot.hostFile(GpuDrivers.LEGACY_MALI_ICD))
+    private fun retireLegacyManifest(driver: GpuDriver) = GpuDrivers.retireLegacyManifest(driver, guest.hostFile(GpuDrivers.LEGACY_MALI_ICD))
 
     /**
      * The patched Mesa tar (scripts/mesa/build-aarch64.sh) is in the APK's assets.
      * A build without that asset leaves the install script to fail closed on the missing file.
      */
     private fun stageMesaBundle() {
-        val dest = proot.hostFile(GpuDrivers.MESA_ZINK_BUNDLE)
+        val dest = guest.hostFile(GpuDrivers.MESA_ZINK_BUNDLE)
         val input = try {
             context.assets.open("mesa-zink/mesa-zink.tar.xz")
         } catch (_: FileNotFoundException) {
@@ -177,7 +184,7 @@ class Gpu(
         script: String,
         lock: Mutex? = null,
     ): Boolean {
-        val (ok, tail) = proot.trackedJob(action, script, lock) { state = it }
+        val (ok, tail) = guest.trackedJob(action, script, lock) { state = it }
         val name = tail.toList().firstNotNullOfOrNull { DEVICE_NAME.find(it)?.groupValues?.get(1) }
         Log.i(TAG, "${context.getString(action)}: ${if (ok) "ok, $name" else "failed"}")
         if (ok) {

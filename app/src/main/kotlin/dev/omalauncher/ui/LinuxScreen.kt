@@ -116,7 +116,7 @@ private fun InstallOffer(runtime: Runtime) {
 @Composable
 private fun Installed(runtime: Runtime) {
     var size by remember { mutableStateOf<Long?>(null) }
-    LaunchedEffect(Unit) { size = withContext(Dispatchers.IO) { diskUsage(runtime.proot.rootfs) } }
+    LaunchedEffect(Unit) { size = withContext(Dispatchers.IO) { diskUsage(runtime.guest.rootfs) } }
     var confirm by remember { mutableStateOf(false) }
     Row(
         Modifier.card(),
