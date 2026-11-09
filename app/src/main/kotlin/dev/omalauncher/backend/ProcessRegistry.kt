@@ -58,22 +58,34 @@ class ProcessRegistry(
         runCatching { parseStarttime(drainBlocking(esc, "cat /proc/$pid/stat", 5).second) }.getOrNull()
 
     /**
-     * Resolve the top-level guest PID from the unique session token. A short
-     * bounded retry covers the interval between Process.start() and the
-     * guest's environment becoming visible in /proc.
+     * Resolve the top-level guest PID from the unique session token. The
+     * token scan runs in one escalated shell (rather than one su spawn per
+     * host PID). A short bounded retry covers Process.start() visibility.
      */
     private fun findRootPid(process: Process, token: String): Int? {
         repeat(5) {
             val (_, psOut, _) =
-                runCatching { drainBlocking(esc, "$psBin -eo pid,ppid,args", 10) }
+                runCatching { drainBlocking(esc, "${shellQuote(psBin)} -eo pid,ppid,args", 10) }
                     .getOrElse { return null }
             val parents = parsePsChildren(psOut)
-            val tokenPids = parents.keys.filter { envHasToken(it, token) == true }.toSet()
+            val tokenPids = runCatching { readTokenPids(token) }.getOrDefault(emptySet())
             findTokenRootPid(parents, tokenPids)?.let { return it }
             if (!process.isAlive) return null
             Thread.sleep(25)
         }
         return null
+    }
+
+    /** Read all pids carrying this token with one su process and a procps snapshot. */
+    private fun readTokenPids(token: String): Set<Int> {
+        val needle = shellQuote("OMNI_SESSION=$token")
+        val command =
+            "${shellQuote(psBin)} -eo pid= | while IFS= read -r pid; do " +
+                "case \"\$pid\" in *[!0-9]*|'') continue ;; esac; " +
+                "if grep -qa $needle \"/proc/\$pid/environ\" 2>/dev/null; then " +
+                "printf '%s\\n' \"\$pid\"; fi; done"
+        val (_, out, _) = drainBlocking(esc, command, 20)
+        return parsePids(out).toSet()
     }
 
     /**
@@ -84,7 +96,7 @@ class ProcessRegistry(
      */
     fun kill(entry: Entry): KillReport {
         val report = KillReport()
-        val (_, psOut, _) = drainBlocking(esc, "$psBin -eo pid,ppid,args", 10)
+        val (_, psOut, _) = drainBlocking(esc, "${shellQuote(psBin)} -eo pid,ppid,args", 10)
         val children = parsePsChildren(psOut)
         val rootPid = entry.pid
 
@@ -100,8 +112,6 @@ class ProcessRegistry(
         val handled = HashSet<Int>()
 
         if (rootPid != null && rootVerified) {
-            // Known descendants are terminated children-first. A descendant
-            // without the token is not assumed to belong to this session.
             for (pid in descendantsPostOrder(rootPid, children)) {
                 when (envHasToken(pid, entry.token)) {
                     true -> {
@@ -116,8 +126,8 @@ class ProcessRegistry(
             handled += rootPid
         }
 
-        // Catch setsid/reparented descendants. If root resolution failed,
-        // this is also the primary path; every candidate must carry the token.
+        // Catch setsid/reparented stragglers. If PID resolution failed,
+        // this token-verified sweep is also the primary kill path.
         for (pid in parsePids(psOut)) {
             if (pid in handled || (pid == rootPid && !rootVerified)) continue
             if (envHasToken(pid, entry.token) == true) {
@@ -145,11 +155,7 @@ class ProcessRegistry(
             code == 0
         }.getOrNull()
 
-    /**
-     * Signals pid and verifies the result: alive-before, signal, alive-after.
-     * The report distinguishes confirmed termination from failed or
-     * inconclusive attempts.
-     */
+    /** Signal and verify the result; never report an unconfirmed kill as stopped. */
     private fun terminate(
         pid: Int,
         report: KillReport,
@@ -196,7 +202,7 @@ internal fun findTokenRootPid(
     parents: Map<Int, Int>,
     tokenPids: Set<Int>,
 ): Int? {
-    val roots = tokenPids.filter { parents[it] !in tokenPids }
+    val roots = tokenPids.filter { pid -> parents[pid]?.let { parent -> parent !in tokenPids } ?: true }
     return roots.singleOrNull()
 }
 

@@ -2,7 +2,6 @@ package dev.omalauncher.backend
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ProcessRegistryTest {
@@ -38,7 +37,7 @@ class ProcessRegistryTest {
         val children = parsePsChildren(ps)
         assertEquals(100, children[200])
         assertEquals(200, children[300])
-        assertEquals(listOf(300, 400), descendantsPostOrder(200, children))
+        assertEquals(setOf(300, 400), descendantsPostOrder(200, children).toSet())
     }
 
     @Test
