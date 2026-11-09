@@ -40,8 +40,7 @@ class LinuxAppsTest {
         desktop(system, "tool.desktop", terminal = true)
         desktop(user, "tool.desktop", noDisplay = true) // user replaces the system entry
         val apps = loadLinuxApps(user, system)
-        assertEquals(listOf("tool"), apps.map { it.id })
-        // The user's entry wins: NoDisplay=true means the system one is hidden.
+        // The user's entry wins: NoDisplay=true hides the system one entirely.
         assertTrue(apps.isEmpty())
     }
 
