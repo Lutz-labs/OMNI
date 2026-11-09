@@ -23,10 +23,11 @@ data class HostTools(
     val grep: String,
     val pkill: String,
     val ps: String,
+) {
 
     /** Every host tool path the backend requires, for escalated presence probes. */
     fun paths(): List<String> = listOf(mount, umount, chroot, cat, grep, pkill, ps, bash)
-) {
+
     /** The first missing tool: (name, path), or null when every tool is there. */
     fun missing(): Pair<String, String>? =
         listOf(
