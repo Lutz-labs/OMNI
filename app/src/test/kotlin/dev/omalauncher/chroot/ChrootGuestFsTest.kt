@@ -5,7 +5,6 @@ import dev.omalauncher.backend.HostTools
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
-import org.junit.Assert.fail
 import org.junit.Test
 import java.io.File
 import java.nio.file.Files
@@ -63,7 +62,7 @@ class ChrootGuestFsTest {
     }
 
     @Test
-    fun `a symlink escaping the rootfs is refused`() {
+    fun `a symlink escaping the rootfs never reaches the host`() {
         val rootfs = Files.createTempDirectory("cfs-root").toFile()
         val state = Files.createTempDirectory("cfs-state").toFile()
         // Target outside the rootfs, like a link swapped in by a guest.
@@ -71,14 +70,20 @@ class ChrootGuestFsTest {
         File(outside, "secret.txt").apply { writeText("s") }
         Files.createSymbolicLink(File(rootfs, "escape").toPath(), outside.toPath())
         val fs = chrootGuestFs(backend(rootfs, state), rootfs)
+        val rootReal = rootfs.canonicalFile
+        val outsideReal = outside.canonicalFile
 
-        // list must show it as broken, host() must refuse to follow it.
+        // The listing shows it as a broken link, never a host directory.
         val entries = fs.list("/", showHidden = false)
-        assertTrue(entries.any { it.name == "escape" && it.isLink })
-        try {
-            fs.host("/escape/secret.txt")
-            fail("escaping symlink must not resolve")
-        } catch (_: Exception) {
+        assertTrue(entries.any { it.name == "escape" && it.isLink && !it.isDir })
+
+        // Resolving through the link must stay inside the rootfs — the real
+        // outside file is never reachable (null, or a mapped rootfs path).
+        val got = runCatching { fs.host("/escape/secret.txt") }.getOrNull()
+        if (got != null) {
+            val real = got.canonicalFile
+            assertTrue(real.path.startsWith(rootReal.path))
+            assertTrue(!real.path.startsWith(outsideReal.path))
         }
     }
 
