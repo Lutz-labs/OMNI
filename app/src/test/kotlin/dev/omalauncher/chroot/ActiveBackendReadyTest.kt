@@ -30,4 +30,16 @@ class ActiveBackendReadyTest {
         assertTrue(activeBackendReady(false, null, legacyReady = true))
         assertFalse(activeBackendReady(false, null, legacyReady = false))
     }
+
+    @Test
+    fun `launch target follows the active backend readiness`() {
+        // chroot backend present + Ready -> guest commands run through the chroot
+        assertEquals(LaunchTarget.CHROOT, launchTarget(true, chrootReady = true))
+        // chroot present but not Ready -> never executes through the chroot
+        // (the launch gate opens settings first; this is the defensive branch)
+        assertEquals(LaunchTarget.PROOT, launchTarget(true, chrootReady = false))
+        // no chroot backend -> legacy PRoot path regardless of chroot state
+        assertEquals(LaunchTarget.PROOT, launchTarget(false, chrootReady = true))
+        assertEquals(LaunchTarget.PROOT, launchTarget(false, chrootReady = false))
+    }
 }

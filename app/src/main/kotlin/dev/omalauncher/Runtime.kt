@@ -44,6 +44,7 @@ import dev.omalauncher.chroot.ChrootBackend
 import dev.omalauncher.chroot.activeBackendReady
 import dev.omalauncher.chroot.chrootGuestFs
 import dev.omalauncher.backend.BackendState
+import dev.omalauncher.backend.drainProcessBlocking
 import dev.omalauncher.linux.GuestFs
 import dev.omalauncher.theme.Style
 import dev.omalauncher.theme.StyleStore
@@ -734,10 +735,31 @@ class Runtime(
             return
         }
         Log.i(TAG, "launch: $command")
-        thread(name = "guest-launch", isDaemon = true) {
-            val code = runCatching { proot.run("exec $command") { Log.i(TAG, "[${command.take(24)}] $it") } }.getOrElse { -1 }
-            Log.i(TAG, "exited $code: $command")
-            onExit()
+        // The active backend (decision B): when the chroot backend is Ready it
+        // runs the command as its own guest process; otherwise the legacy
+        // PRoot path. Both keep the same contract: independent process,
+        // /dev/null stdin, output to logcat, exit code, onExit on the thread.
+        when (launchTarget(chrootBackend != null, chrootState?.value == BackendState.Ready)) {
+            LaunchTarget.CHROOT -> {
+                val backend = chrootBackend!!
+                thread(name = "guest-launch", isDaemon = true) {
+                    val code =
+                        runCatching {
+                            val process = backend.spawn(command)
+                            runCatching { process.outputStream.close() } // /dev/null stdin, as proot never fed it
+                            drainProcessBlocking(process, Long.MAX_VALUE) { Log.i(TAG, "[${command.take(24)}] $it") }.exitCode
+                        }.getOrElse { -1 }
+                    Log.i(TAG, "exited $code: $command")
+                    onExit()
+                }
+            }
+            LaunchTarget.PROOT -> {
+                thread(name = "guest-launch", isDaemon = true) {
+                    val code = runCatching { proot.run("exec $command") { Log.i(TAG, "[${command.take(24)}] $it") } }.getOrElse { -1 }
+                    Log.i(TAG, "exited $code: $command")
+                    onExit()
+                }
+            }
         }
     }
 

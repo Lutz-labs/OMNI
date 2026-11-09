@@ -13,3 +13,11 @@ internal fun activeBackendReady(
     chrootState: BackendState?,
     legacyReady: Boolean,
 ): Boolean = if (hasChrootBackend) chrootState == BackendState.Ready else legacyReady
+
+/** Which executor a guest launch uses: the active ready chroot backend, or the legacy PRoot path. */
+internal fun launchTarget(
+    hasChrootBackend: Boolean,
+    chrootReady: Boolean,
+): LaunchTarget = if (hasChrootBackend && chrootReady) LaunchTarget.CHROOT else LaunchTarget.PROOT
+
+internal enum class LaunchTarget { CHROOT, PROOT }
