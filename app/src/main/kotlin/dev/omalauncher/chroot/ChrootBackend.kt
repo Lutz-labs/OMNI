@@ -4,6 +4,7 @@ import dev.omalauncher.backend.Backend
 import dev.omalauncher.backend.BackendState
 import dev.omalauncher.backend.ChrootConfig
 import dev.omalauncher.backend.CmdResult
+import dev.omalauncher.backend.Escalator
 import dev.omalauncher.backend.MountLedger
 import dev.omalauncher.backend.MountLedgerFile
 import dev.omalauncher.backend.MountSupervisor
@@ -13,6 +14,7 @@ import dev.omalauncher.backend.SuEscalator
 import dev.omalauncher.backend.drain
 import dev.omalauncher.backend.drainProcessBlocking
 import dev.omalauncher.backend.guestFileFor
+import dev.omalauncher.backend.shellQuote
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
