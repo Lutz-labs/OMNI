@@ -32,6 +32,12 @@ interface LinuxGuest {
     /** Guest-visible directory for launcher FIFOs and state (host path, inside the active rootfs). */
     val runtimeDir: File
 
+    /** The guest path of [runtimeDir], what guest scripts and bridges name it. */
+    val guestRuntimeDir: String
+
+    /** The guest path of [home], what guest scripts name the home directory. */
+    val guestHome: String
+
     /** Host-side keymap the Wayland server uses; backend-independent. */
     val keymap: File
 
@@ -55,6 +61,9 @@ interface LinuxGuest {
 
     /** Launcher-managed files in the guest (the proot bwrap shim and friends); empty when the guest needs none. */
     fun managed(): List<Managed>
+
+    /** Kills every launcher-started guest process (legacy: the proot tracees; chroot: the registered backend processes). */
+    fun killAll()
 
     /** The graphics environment guest commands run with (software rendering by default). */
     var graphicsEnv: List<String>

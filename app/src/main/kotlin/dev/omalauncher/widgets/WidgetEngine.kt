@@ -125,7 +125,7 @@ class WidgetEngine(
             shortcuts.onSave = home::changed
         }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-    private val services = WidgetServices(context, proot, runtime, scope)
+    private val services = WidgetServices(context, guest, runtime, scope)
 
     /** Opens launcher screens ("style" or "themes", "agents", "drawer"); set by the UI. */
     var launcherAction by services::launcherAction

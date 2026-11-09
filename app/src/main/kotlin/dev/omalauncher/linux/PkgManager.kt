@@ -39,12 +39,10 @@ internal fun aptUpdateScript(): String =
 /** Simulated upgrade, printed in the same shape the updates screen parses: packages, then the `#pacman` marker. */
 internal fun aptCheckScript(): String =
     """
-    out=$$(apt-get -s upgrade 2>&1)
-    rc=$$?
-    if [ $$rc -ne 0 ] || printf '%s' "$$out" | grep -q '^E:'; then
+    if apt-get -s upgrade 2>&1 | grep -qE '^(E:|Err)'; then
       echo '#pacman-error'
     else
-      printf '%s' "$$out" | awk '/^Inst /{print $$2}'
+      apt-get -s upgrade 2>&1 | awk '/^Inst /{print ${'$'}2}'
       echo '#pacman'
     fi
     """.trimIndent()

@@ -169,8 +169,8 @@ class WidgetServices(
     val shells = ShellPool(guest, 3)
 
     /** Actions get their own shell: a long run(...) never delays widget updates. */
-    private val actionShell = GuestShell(proot)
-    private val streams = Streams(proot, scope)
+    private val actionShell = GuestShell(guest)
+    private val streams = Streams(guest, scope)
 
     /** What's playing on the phone. */
     val media = Media(context)
@@ -364,7 +364,7 @@ class WidgetServices(
     override fun fileUpdates(path: String) = watchFile { guestFile(path) }
 
     override fun guestFile(path: String): File? {
-        val p = if (path.startsWith("~/")) Proot.GUEST_HOME + "/" + path.removePrefix("~/") else path
+        val p = if (path.startsWith("~/")) guest.guestHome + "/" + path.removePrefix("~/") else path
         return guest.guestFile(p)
     }
 

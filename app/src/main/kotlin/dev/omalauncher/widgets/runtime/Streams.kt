@@ -1,6 +1,6 @@
 package dev.omalauncher.widgets.runtime
 
-import dev.omalauncher.linux.Proot
+import dev.omalauncher.linux.LinuxGuest
 import dev.omalauncher.linux.killTree
 import dev.omalauncher.linux.shellQuote
 import dev.omalauncher.widgets.lang.WidgetError

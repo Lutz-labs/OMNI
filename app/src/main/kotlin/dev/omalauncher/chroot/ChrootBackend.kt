@@ -51,6 +51,11 @@ class ChrootBackend(
     fun processBuilder(script: String): ProcessBuilder =
         requireFactory().spawn(script, cwd = config.guestHome, token = "raw-${UUID.randomUUID()}")
 
+    /** Kills every registered guest process; used by the launcher's own cleanup paths. */
+    fun killAll() {
+        registry?.killAll()
+    }
+
     /** Merges `K=V` pairs into every subsequent guest process's environment. */
     fun updateGuestEnv(env: List<String>) {
         for (pair in env) {

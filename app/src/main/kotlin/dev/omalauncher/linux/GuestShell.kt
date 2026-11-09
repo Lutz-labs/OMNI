@@ -119,7 +119,7 @@ class ShellPool(
     guest: LinuxGuest,
     size: Int,
 ) {
-    private val idle = Channel<GuestShell>(size).apply { repeat(size) { trySend(GuestShell(proot)) } }
+    private val idle = Channel<GuestShell>(size).apply { repeat(size) { trySend(GuestShell(guest)) } }
 
     suspend fun run(
         command: String,

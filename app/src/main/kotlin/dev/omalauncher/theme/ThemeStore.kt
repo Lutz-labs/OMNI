@@ -100,7 +100,7 @@ class ThemeStore(
 ) {
     private val release = OmarchyRelease(LauncherData.omarchyDir(context))
     private val dirs = themeDirs(context)
-    private val guest = GuestThemeConfig(proot, release.dir)
+    private val guest = GuestThemeConfig(guest, release.dir)
     private val prefs = prefs(context)
 
     var themes by mutableStateOf<List<OmarchyTheme>>(emptyList())

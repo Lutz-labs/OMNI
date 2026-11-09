@@ -19,6 +19,8 @@ class ProotGuest(
     override val launcherConfig: File get() = proot.launcherConfig
     override val tmpDir: File get() = proot.tmpDir
     override val runtimeDir: File get() = proot.runtimeDir
+    override val guestRuntimeDir: String get() = Proot.GUEST_RUNTIME_DIR
+    override val guestHome: String get() = Proot.GUEST_HOME
     override val keymap: File get() = proot.keymap
     override val guestFs: GuestFs get() = proot.guestFs
     override fun guestFile(guestPath: String): File? = proot.guestFile(guestPath)
@@ -33,6 +35,7 @@ class ProotGuest(
     }
     override fun process(script: String): ProcessBuilder = proot.process(script)
     override fun managed(): List<Managed> = proot.managed()
+    override fun killAll() = proot.killAll()
     override var graphicsEnv: List<String>
         get() = proot.graphicsEnv
         set(value) {

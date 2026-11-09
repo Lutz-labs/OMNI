@@ -26,7 +26,7 @@ class OpenBridge(
     private val onEdit: (String, String) -> Unit,
 ) {
     private val fifo = File(guest.runtimeDir, "open.fifo")
-    private val guestFifo = "${Proot.GUEST_RUNTIME_DIR}/${fifo.name}"
+    private val guestFifo = "${guest.guestRuntimeDir}/${fifo.name}"
 
     private var started = false
 
@@ -112,7 +112,7 @@ class OpenBridge(
                 [ ${'$'}# -eq 1 ] && [ ! -d "${'$'}1" ] || exec micro "${'$'}@"
                 case ${'$'}1 in -* | +*) exec micro "${'$'}@" ;; esac
                 file=${'$'}(realpath -m -- "${'$'}1") || exec micro "${'$'}@"
-                reply=${'$'}(mktemp -u ${Proot.GUEST_RUNTIME_DIR}/edit.XXXXXX)
+                reply=${'$'}(mktemp -u ${guest.guestRuntimeDir}/edit.XXXXXX)
                 mkfifo -m 600 "${'$'}reply" || exec micro "${'$'}@"
                 trap 'rm -f "${'$'}reply"; exit 130' INT TERM HUP
                 if timeout 2 sh -c 'printf "%s\n" "${'$'}1" > $guestFifo' sh "$EDIT_PREFIX${'$'}reply ${'$'}file"; then

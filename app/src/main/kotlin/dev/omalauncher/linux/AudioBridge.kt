@@ -24,7 +24,7 @@ class AudioBridge(
     private val guest: LinuxGuest,
 ) {
     private val fifo = File(guest.runtimeDir, "audio.fifo")
-    private val runtimeDir = Proot.GUEST_RUNTIME_DIR
+    private val runtimeDir = guest.guestRuntimeDir
 
     /** PulseAudio config: only the socket clients use and the pipe sink we read. */
     private val config =

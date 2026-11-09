@@ -24,7 +24,9 @@ class ChrootGuest(
     override val applications: File get() = File(home, ".local/share/applications")
     override val launcherConfig: File get() = File(home, ".config/omalauncher")
     override val tmpDir: File get() = File(rootfs, "tmp")
-    override val runtimeDir: File get() = File(tmpDir, "omni")
+    override val runtimeDir: File get() = File(rootfs, "run/user/0")
+    override val guestRuntimeDir: String get() = Proot.GUEST_RUNTIME_DIR
+    override val guestHome: String get() = Proot.GUEST_HOME
     override val keymap: File get() = File(launcherFiles, "keymap.xkb")
     override val guestFs: GuestFs by lazy { chrootGuestFs(backend, rootfs) }
 
@@ -48,6 +50,8 @@ class ChrootGuest(
 
     /** The Kali guest needs no proot bwrap shim. */
     override fun managed(): List<Managed> = emptyList()
+
+    override fun killAll() = backend.killAll()
 
     override var graphicsEnv: List<String> = SOFTWARE_ENV
         set(value) {

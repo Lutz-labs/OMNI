@@ -2,7 +2,7 @@ package dev.omalauncher.theme
 
 import dev.omalauncher.LauncherData
 import android.system.Os
-import dev.omalauncher.linux.Proot
+import dev.omalauncher.linux.LinuxGuest
 import dev.omalauncher.linux.TerminalFont
 import dev.omalauncher.linux.run
 import dev.omalauncher.upgrade.Managed
@@ -40,7 +40,7 @@ class GuestThemeConfig(
             val colors = if (tpl.name == "foot.ini.tpl") footColors(theme.colors) else theme.colors
             if (!out.exists()) out.writeText(Templates.render(tpl.readText(), colors))
         }
-        symlink("${Proot.GUEST_HOME}/.local/state/omarchy/current/theme/btop.theme", File(home, ".config/btop/themes/current.theme"))
+        symlink("${guest.guestHome}/.local/state/omarchy/current/theme/btop.theme", File(home, ".config/btop/themes/current.theme"))
         // Like omarchy-theme-set-claude and -pi; both agents reload the file, so running sessions recolor too.
         // Claude Code's is there to pick in /theme once it has been run; Pi's is picked from the start (see managed()).
         if (File(home, ".claude").isDirectory) copyTheme(File(themeDir, "claude.json"), ".claude/themes/omarchy.json")

@@ -165,7 +165,7 @@ class Pacman(
     suspend fun remove(name: String) = run(name, R.string.linux_job_removing, "pacman -Rns --noconfirm ${shellQuote(name)}")
 
     /** Kept between searches: starting proot costs more than the search. */
-    private val shell = GuestShell(proot)
+    private val shell = GuestShell(guest)
 
     private suspend fun output(script: String): String =
         runCatching { shell.run(script, timeoutSeconds = 30).out }.getOrElse {
