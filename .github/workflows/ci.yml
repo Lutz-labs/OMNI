@@ -78,3 +78,16 @@ jobs:
 
       - name: Lint
         run: ./gradlew :app:lintDebug
+
+      # The lint job fails, so the report must be uploaded even then: the whole
+      # error list is only visible in lint-results-debug.xml/html.
+      - name: Upload lint report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-report
+          path: |
+            app/build/reports/lint-results-debug.xml
+            app/build/reports/lint-results-debug.html
+          if-no-files-found: ignore
+          retention-days: 7
