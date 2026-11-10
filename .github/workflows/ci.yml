@@ -1,8 +1,11 @@
 name: ci
 
 on:
+  workflow_dispatch:
+
   push:
-    branches: [main]
+    branches: [main, omni-dev]
+
   pull_request:
 
 permissions:
