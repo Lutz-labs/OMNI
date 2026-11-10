@@ -37,6 +37,7 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import dev.omalauncher.PhoneStorage
 import dev.omalauncher.Runtime
 import dev.omalauncher.R
+import dev.omalauncher.backend.BackendState
 import dev.omalauncher.linux.AGENTS
 import dev.omalauncher.linux.JobState
 import dev.omalauncher.linux.LinuxState
@@ -54,23 +55,60 @@ import java.nio.file.attribute.BasicFileAttributes
  * Everything about the optional Linux system in one place: what it adds and
  * an install button, the install's progress, or, once installed, its size
  * and a way to remove it. Every feature that needs Linux opens this.
+ *
+ * With a chroot backend the screen shows the Kali chroot's own state; the
+ * legacy Arch install only shows while no chroot backend exists.
  */
 @Composable
 fun LinuxScreen(
     runtime: Runtime,
     onDismiss: () -> Unit,
 ) {
-    val state by runtime.bootstrap.state.collectAsState()
+    val chrootState = runtime.chrootState?.collectAsState()?.value
     OverlayPanel(stringResource(R.string.linux_title), onDismiss, contentWidth = ReadingWidth) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 4.dp)) {
-            when (val s = state) {
-                LinuxState.Checking -> {}
-                LinuxState.NotInstalled -> InstallOffer(runtime)
-                is LinuxState.Installing, is LinuxState.Failed -> LinuxProgress(s, runtime.bootstrap.chosenAgents, runtime::retryLinux, runtime::cancelLinux.takeIf { runtime.bootstrap.cancellable })
-                LinuxState.Installed -> Installed(runtime)
-                LinuxState.Removing -> BasicText(stringResource(R.string.linux_removing), style = Mono.copy(color = Palette.accent))
+            when (chrootState) {
+                null -> LegacyLinuxState(runtime)
+                else -> ChrootStatus(runtime, chrootState)
             }
         }
+    }
+}
+
+/** The legacy Arch install flow: shown only while no chroot backend exists. */
+@Composable
+private fun LegacyLinuxState(runtime: Runtime) {
+    val state by runtime.bootstrap.state.collectAsState()
+    when (val s = state) {
+        LinuxState.Checking -> {}
+        LinuxState.NotInstalled -> InstallOffer(runtime)
+        is LinuxState.Installing, is LinuxState.Failed -> LinuxProgress(s, runtime.bootstrap.chosenAgents, runtime::retryLinux, runtime::cancelLinux.takeIf { runtime.bootstrap.cancellable })
+        LinuxState.Installed -> Installed(runtime)
+        LinuxState.Removing -> BasicText(stringResource(R.string.linux_removing), style = Mono.copy(color = Palette.accent))
+    }
+}
+
+/** The ACTIVE Kali chroot's state, shown whenever a chroot backend exists. */
+@Composable
+private fun ChrootStatus(runtime: Runtime, state: BackendState) {
+    when (state) {
+        BackendState.Checking ->
+            BasicText(
+                stringResource(R.string.linux_chroot_checking),
+                style = Mono.copy(color = Palette.muted, fontSize = TextSize.Small),
+            )
+        BackendState.Ready -> Installed(runtime, label = R.string.linux_kali)
+        is BackendState.Failed ->
+            Column(Modifier.fillMaxWidth()) {
+                BasicText(stringResource(R.string.linux_chroot_failed), style = Mono.copy(color = Palette.red, fontSize = TextSize.Item))
+                Spacer(Modifier.height(8.dp))
+                BasicText(state.message, style = Mono.copy(color = Palette.muted, fontSize = TextSize.Small))
+                Spacer(Modifier.height(16.dp))
+                Row {
+                    BracketAction(stringResource(R.string.linux_retry), Palette.accent, Modifier.passesKeys(), runtime::retryLinux)
+                    BracketAction(stringResource(R.string.linux_cancel), Palette.muted, Modifier.passesKeys(), runtime::cancelLinux)
+                }
+            }
     }
 }
 
@@ -114,7 +152,10 @@ private fun InstallOffer(runtime: Runtime) {
 }
 
 @Composable
-private fun Installed(runtime: Runtime) {
+private fun Installed(
+    runtime: Runtime,
+    label: Int = R.string.linux_arch,
+) {
     var size by remember { mutableStateOf<Long?>(null) }
     LaunchedEffect(Unit) { size = withContext(Dispatchers.IO) { diskUsage(runtime.guest.rootfs) } }
     var confirm by remember { mutableStateOf(false) }
@@ -123,7 +164,7 @@ private fun Installed(runtime: Runtime) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            BasicText(stringResource(R.string.linux_arch), style = Mono.copy(fontSize = TextSize.Item))
+            BasicText(stringResource(label), style = Mono.copy(fontSize = TextSize.Item))
             BasicText(
                 stringResource(R.string.linux_installed_size, size?.let(::formatSize) ?: stringResource(R.string.linux_measuring)),
                 style = Mono.copy(color = Palette.muted, fontSize = TextSize.Small),
@@ -152,7 +193,7 @@ private fun Installed(runtime: Runtime) {
         ) {
             BasicText(stringResource(R.string.linux_remove_ask), style = Mono.copy(color = Palette.red))
             BasicText(
-                stringResource(R.string.linux_remove_body),
+                stringResource(if (label == R.string.linux_arch) R.string.linux_remove_body else R.string.linux_chroot_remove_body),
                 style = Mono.copy(color = Palette.muted, fontSize = TextSize.Small),
             )
             Row {

@@ -147,6 +147,12 @@
         <item quantity="other">install linux and %d agents</item>
     </plurals>
     <string name="linux_arch">arch linux</string>
+    <!-- The ACTIVE backend is the Kali chroot; the legacy Arch install only
+         shows while no chroot backend exists. -->
+    <string name="linux_kali">Kali Linux (chroot)</string>
+    <string name="linux_chroot_checking">Preparing the Kali chroot…</string>
+    <string name="linux_chroot_failed">The Kali chroot could not start</string>
+    <string name="linux_chroot_remove_body">Removes what OMNI manages in the Kali guest — Linux apps, coding agents, themes. The Kali rootfs itself stays on the device.</string>
     <!-- %1$s: the size on disk, like 2.1 GB, or "measuring…". -->
     <string name="linux_installed_size">installed · %1$s</string>
     <string name="linux_measuring">measuring…</string>
